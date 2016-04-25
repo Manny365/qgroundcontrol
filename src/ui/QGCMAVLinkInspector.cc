@@ -2,7 +2,10 @@
 
 #include "QGCMAVLink.h"
 #include "QGCMAVLinkInspector.h"
-#include "UASManager.h"
+#include "MultiVehicleManager.h"
+#include "UAS.h"
+#include "QGCApplication.h"
+
 #include "ui_QGCMAVLinkInspector.h"
 
 #include <QDebug>
@@ -10,8 +13,8 @@
 const float QGCMAVLinkInspector::updateHzLowpass = 0.2f;
 const unsigned int QGCMAVLinkInspector::updateInterval = 1000U;
 
-QGCMAVLinkInspector::QGCMAVLinkInspector(MAVLinkProtocol* protocol, QWidget *parent) :
-    QWidget(parent),
+QGCMAVLinkInspector::QGCMAVLinkInspector(const QString& title, QAction* action, MAVLinkProtocol* protocol, QWidget *parent) :
+    QGCDockWidget(title, action, parent),
     _protocol(protocol),
     selectedSystemID(0),
     selectedComponentID(0),
@@ -40,30 +43,35 @@ QGCMAVLinkInspector::QGCMAVLinkInspector(MAVLinkProtocol* protocol, QWidget *par
     rateHeader << tr("#ID");
     rateHeader << tr("Rate");
     ui->rateTreeWidget->setHeaderLabels(rateHeader);
-    connect(ui->rateTreeWidget, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
-            this, SLOT(rateTreeItemChanged(QTreeWidgetItem*,int)));
+    connect(ui->rateTreeWidget, &QTreeWidget::itemChanged,
+            this, &QGCMAVLinkInspector::rateTreeItemChanged);
     ui->rateTreeWidget->hide();
 
     // Connect the UI
-    connect(ui->systemComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(selectDropDownMenuSystem(int)));
-    connect(ui->componentComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(selectDropDownMenuComponent(int)));
-    connect(ui->clearButton, SIGNAL(clicked()), this, SLOT(clearView()));
+    connect(ui->systemComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            this, &QGCMAVLinkInspector::selectDropDownMenuSystem);
+    connect(ui->componentComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            this, &QGCMAVLinkInspector::selectDropDownMenuComponent);
+
+    connect(ui->clearButton, &QPushButton::clicked, this, &QGCMAVLinkInspector::clearView);
 
     // Connect external connections
-    connect(UASManager::instance(), SIGNAL(UASCreated(UASInterface*)), this, SLOT(addSystem(UASInterface*)));
-    connect(protocol, SIGNAL(messageReceived(LinkInterface*,mavlink_message_t)), this, SLOT(receiveMessage(LinkInterface*,mavlink_message_t)));
+    connect(qgcApp()->toolbox()->multiVehicleManager(), &MultiVehicleManager::vehicleAdded, this, &QGCMAVLinkInspector::_vehicleAdded);
+    connect(protocol, &MAVLinkProtocol::messageReceived, this, &QGCMAVLinkInspector::receiveMessage);
 
     // Attach the UI's refresh rate to a timer.
-    connect(&updateTimer, SIGNAL(timeout()), this, SLOT(refreshView()));
+    connect(&updateTimer, &QTimer::timeout, this, &QGCMAVLinkInspector::refreshView);
     updateTimer.start(updateInterval);
+    
+    loadSettings();
 }
 
-void QGCMAVLinkInspector::addSystem(UASInterface* uas)
+void QGCMAVLinkInspector::_vehicleAdded(Vehicle* vehicle)
 {
-    ui->systemComboBox->addItem(uas->getUASName(), uas->getUASID());
+    ui->systemComboBox->addItem(QString("Vehicle %1").arg(vehicle->id()), vehicle->id());
 
     // Add a tree for a new UAS
-    addUAStoTree(uas->getUASID());
+    addUAStoTree(vehicle->id());
 }
 
 void QGCMAVLinkInspector::selectDropDownMenuSystem(int dropdownid)
@@ -97,9 +105,10 @@ void QGCMAVLinkInspector::rebuildComponentList()
     ui->componentComboBox->addItem(tr("All"), 0);
 
     // Fill
-    UASInterface* uas = UASManager::instance()->getUASForId(selectedSystemID);
-    if (uas)
+    Vehicle* vehicle = qgcApp()->toolbox()->multiVehicleManager()->getVehicleById(selectedSystemID);
+    if (vehicle)
     {
+        UASInterface* uas = vehicle->uas();
         QMap<int, QString> components = uas->getComponents();
         foreach (int id, components.keys())
         {
@@ -329,19 +338,12 @@ void QGCMAVLinkInspector::addUAStoTree(int sysId)
     if(!uasTreeWidgetItems.contains(sysId))
     {
         // Add the UAS to the main tree after it has been created
-        UASInterface* uas = UASManager::instance()->getUASForId(sysId);
-
-        if (uas)
+        Vehicle* vehicle = qgcApp()->toolbox()->multiVehicleManager()->getVehicleById(sysId);
+        if (vehicle)
         {
+            UASInterface* uas = vehicle->uas();
             QStringList idstring;
-            if (uas->getUASName() == "")
-            {
-                idstring << tr("UAS ") + QString::number(uas->getUASID());
-            }
-            else
-            {
-                idstring << uas->getUASName();
-            }
+            idstring << QString("Vehicle %1").arg(uas->getUASID());
             QTreeWidgetItem* uasWidget = new QTreeWidgetItem(idstring);
             uasWidget->setFirstColumnSpanned(true);
             uasTreeWidgetItems.insert(sysId,uasWidget);
@@ -491,7 +493,10 @@ void QGCMAVLinkInspector::changeStreamInterval(int msgid, int interval)
     mavlink_message_t msg;
     mavlink_msg_request_data_stream_encode(_protocol->getSystemId(), _protocol->getComponentId(), &msg, &stream);
 
+#if 0
+    // FIXME: Is this really used?
     _protocol->sendMessage(msg);
+#endif
 }
 
 void QGCMAVLinkInspector::rateTreeItemChanged(QTreeWidgetItem* paramItem, int column)

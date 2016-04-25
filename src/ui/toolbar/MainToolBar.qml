@@ -27,741 +27,511 @@ This file is part of the QGROUNDCONTROL project
  *   @author Gus Grubba <mavlink@grubba.com>
  */
 
-import QtQuick 2.3
+import QtQuick 2.5
+import QtQuick.Layouts 1.2
 import QtQuick.Controls 1.2
 import QtQuick.Controls.Styles 1.2
 
-import QGroundControl.Controls 1.0
-import QGroundControl.FactControls 1.0
-import QGroundControl.Palette 1.0
-import QGroundControl.MainToolBar 1.0
-import QGroundControl.MavManager 1.0
-import QGroundControl.ScreenTools 1.0
+import QGroundControl                       1.0
+import QGroundControl.Controls              1.0
+import QGroundControl.Palette               1.0
+import QGroundControl.MultiVehicleManager   1.0
+import QGroundControl.ScreenTools           1.0
+import QGroundControl.Controllers           1.0
 
 Rectangle {
-    id: toolBarHolder
+    id:         toolBar
+    color:      qgcPal.globalTheme === QGCPalette.Light ? Qt.rgba(1,1,1,0.8) : Qt.rgba(0,0,0,0.75)
 
-    property var qgcPal: QGCPalette { id: palette; colorGroupEnabled: true }
+    QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
-    property int cellSpacerSize: ScreenTools.isMobile ? getProportionalDimmension(6) : getProportionalDimmension(4)
-    property int cellHeight:     getProportionalDimmension(30)
+    property var  activeVehicle:        QGroundControl.multiVehicleManager.activeVehicle
+    property var  mainWindow:           null
+    property bool isMessageImportant:   activeVehicle ? !activeVehicle.messageTypeNormal && !activeVehicle.messageTypeNone : false
+    property bool isBackgroundDark:     true
+    property bool opaqueBackground:     false
 
-    property var colorBlue:       "#1a6eaa"
-    property var colorGreen:      "#329147"
-    property var colorRed:        "#942324"
-    property var colorOrange:     "#a76f26"
-    property var colorWhite:      "#f0f0f0"
+    /*
+        Dev System (Mac OS)
 
-    property var colorOrangeText: (qgcPal.globalTheme === QGCPalette.Light) ? "#b75711" : "#ea8225"
-    property var colorRedText:    (qgcPal.globalTheme === QGCPalette.Light) ? "#ee1112" : "#ef2526"
-    property var colorGreenText:  (qgcPal.globalTheme === QGCPalette.Light) ? "#046b1b" : "#00d930"
-    property var colorWhiteText:  (qgcPal.globalTheme === QGCPalette.Light) ? "#343333" : "#f0f0f0"
+        qml: Main Window Width:   1008
+        qml: Toolbar height:      51.2
+        qml: Default font:        12.8
+        qml: Font (.75):          9.600000000000001
+        qml: Font (.85):          10.88
+        qml: Font 1.5):           19.200000000000003
+        qml: Default Font Width:  8.328125
+        qml: Default Font Height: 12.8
+        qml: --
+        qml: Real Font Height:    16
+        qml: fontHRatio:          1
+        qml: --
+        qml: cellHeight:          38
+        qml: tbFontSmall:         10
+        qml: tbFontNormal:        12
+        qml: tbFontLarge:         18
+        qml: tbSpacing:           9.54
 
-    color:  qgcPal.windowShade
+        Nexus 9
 
-    function getProportionalDimmension(val) {
-        return toolBarHolder.height * val / 40
+        qml: Main Window Width:   2048
+        qml: Toolbar height:      90.9312
+        qml: Default font:        38
+        qml: Font (.75):          28.5
+        qml: Font (.85):          32.3
+        qml: Font 1.5):           57
+        qml: Default Font Width:  20.0625
+        qml: Default Font Height: 38
+        qml: --
+        qml: Real Font Height:    38
+        qml: fontHRatio:          2.375
+        qml: --
+        qml: cellHeight:          68
+        qml: tbFontSmall:         23.75
+        qml: tbFontNormal:        28.5
+        qml: tbFontLarge:         42.75
+        qml: tbSpacing:           16.87552
+
+        Nexus 7
+
+        qml: Main Window Width:   1920
+        qml: Toolbar height:      85.248
+        qml: Default font:        38
+        qml: Font (.75):          28.5
+        qml: Font (.85):          32.3
+        qml: Font 1.5):           57
+        qml: Default Font Width:  20.140625
+        qml: Default Font Height: 38
+        qml: --
+        qml: Real Font Height:    38
+        qml: fontHRatio:          2.375
+        qml: --
+        qml: cellHeight:          63
+        qml: tbFontSmall:         23.75
+        qml: tbFontNormal:        28.5
+        qml: tbFontLarge:         42.75
+        qml: tbSpacing:           15.820800000000002
+
+        Nexus 4
+
+        qml: Main Window Width:   1196
+        qml: Toolbar height:      79.65360000000001
+        qml: Default font:        38
+        qml: Font (.75):          28.5
+        qml: Font (.85):          32.3
+        qml: Font 1.5):           57
+        qml: Default Font Width:  20.140625
+        qml: Default Font Height: 38
+        qml: --
+        qml: Real Font Height:    38
+        qml: fontHRatio:          2.375
+        qml: --
+        qml: cellHeight:          59
+        qml: tbFontSmall:         23.75
+        qml: tbFontNormal:        28.5
+        qml: tbFontLarge:         42.75
+        qml: tbSpacing:           9.85504
+
+    */
+
+    readonly property real  tbFontSmall:    10 * ScreenTools.fontHRatio
+    readonly property real  tbFontNormal:   12 * ScreenTools.fontHRatio
+    readonly property real  tbFontLarge:    18 * ScreenTools.fontHRatio
+
+    readonly property var   colorGreen:     "#05f068"
+    readonly property var   colorOrange:    "#f0ab06"
+    readonly property var   colorRed:       "#fc4638"
+    readonly property var   colorGrey:      "#7f7f7f"
+    readonly property var   colorBlue:      "#636efe"
+    readonly property var   colorWhite:     "#ffffff"
+
+    signal showSetupView()
+    signal showPlanView()
+    signal showFlyView()
+
+    MainToolBarController { id: _controller }
+
+    function checkSetupButton() {
+        setupButton.checked = true
     }
 
-    function getMessageColor() {
-        if(mainToolBar.messageType === MainToolBar.MessageNone)
-            return qgcPal.button;
-        if(mainToolBar.messageType === MainToolBar.MessageNormal)
-            return colorBlue;
-        if(mainToolBar.messageType === MainToolBar.MessageWarning)
-            return colorOrange;
-        if(mainToolBar.messageType === MainToolBar.MessageError)
-            return colorRed;
-        // Cannot be so make make it obnoxious to show error
-        return "purple";
+    function checkPlanButton() {
+        planButton.checked = true
     }
 
-    function getMessageIcon() {
-        if(mainToolBar.messageType === MainToolBar.MessageNormal || mainToolBar.messageType === MainToolBar.MessageNone)
-            return "qrc:/res/Megaphone";
-        else
-            return "qrc:/res/Yield";
-    }
-
-    function getBatteryIcon() {
-        if(MavManager.batteryPercent < 20.0)
-            return "qrc:/res/Battery_0";
-        else if(MavManager.batteryPercent < 40.0)
-            return "qrc:/res/Battery_20";
-        else if(MavManager.batteryPercent < 60.0)
-            return "qrc:/res/Battery_40";
-        else if(MavManager.batteryPercent < 80.0)
-            return "qrc:/res/Battery_60";
-        else if(MavManager.batteryPercent < 90.0)
-            return "qrc:/res/Battery_80";
-        else
-            return "qrc:/res/Battery_100";
+    function checkFlyButton() {
+        flyButton.checked = true
     }
 
     function getBatteryColor() {
-        if (MavManager.batteryPercent > 40.0)
-            return colorGreen;
-        if(MavManager.batteryPercent > 0.01)
-            return colorRed;
-        // This means there is no battery level data
-        return colorBlue;
-    }
-
-    function getSatelliteColor() {
-        // No GPS data
-        if (MavManager.satelliteCount < 0)
-            return qgcPal.button
-        // No Lock
-        if(MavManager.satelliteLock < 2)
-            return colorRed;
-        // 2D Lock
-        if(MavManager.satelliteLock === 2)
-            return colorBlue;
-        // Lock is 3D or more
-        return colorGreen;
+        if(activeVehicle) {
+            if(activeVehicle.battery.percentRemaining.value > 75) {
+                return colorGreen
+            }
+            if(activeVehicle.battery.percentRemaining.value > 50) {
+                return colorOrange
+            }
+            if(activeVehicle.battery.percentRemaining.value > 0.1) {
+                return colorRed
+            }
+        }
+        return colorGrey
     }
 
     function getRSSIColor(value) {
-        if(value < 10)
-            return colorRed;
-        if(value < 50)
+        if(value >= 0)
+            return colorGrey;
+        if(value > -60)
+            return colorGreen;
+        if(value > -90)
             return colorOrange;
-        return colorGreen;
+        return colorRed;
     }
 
-    function showMavStatus() {
-         return (MavManager.mavPresent && MavManager.heartbeatTimeout === 0 && mainToolBar.connectionCount > 0);
+    Component.onCompleted: {
+        //-- TODO: Get this from the actual state
+        flyButton.checked = true
     }
 
-    //-------------------------------------------------------------------------
-    //-- Main menu for Mobile Devices
-    Menu {
-        id: maintMenu
-        ExclusiveGroup { id: mainMenuGroup }
-        MenuItem {
-            text: "Vehicle Setup"
-            checkable:  true
-            exclusiveGroup: mainMenuGroup
-            checked: (mainToolBar.currentView === MainToolBar.ViewSetup)
-            onTriggered:
-            {
-                mainToolBar.onSetupView();
-            }
-        }
-        MenuItem {
-            text: "Plan View"
-            checkable:  true
-            checked: (mainToolBar.currentView === MainToolBar.ViewPlan)
-            exclusiveGroup: mainMenuGroup
-            onTriggered:
-            {
-                mainToolBar.onPlanView();
-            }
-        }
-        MenuItem {
-            text: "Flight View"
-            checkable: true
-            checked: (mainToolBar.currentView === MainToolBar.ViewFly)
-            exclusiveGroup: mainMenuGroup
-            onTriggered:
-            {
-                mainToolBar.onFlyView();
-            }
-        }
-        //-- Flight View Context Menu
-        MenuItem {
-            text: "Flight View Options..."
-            visible: (mainToolBar.currentView === MainToolBar.ViewFly)
-            onTriggered:
-            {
-                mainToolBar.onFlyViewMenu();
-            }
-        }
-    }
+    //---------------------------------------------
+    // GPS Info
+    Component {
+        id: gpsInfo
 
-    Row {
-        id:                     row1
-        height:                 cellHeight
-        anchors.left:           parent.left
-        spacing:                getProportionalDimmension(4)
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin:     getProportionalDimmension(10)
-
-        //---------------------------------------------------------------------
-        //-- Main menu for Non Mobile Devices (Chevron Buttons)
-        Row {
-            id:                     row11
-            height:                 cellHeight
-            spacing:                -getProportionalDimmension(12)
-            anchors.verticalCenter: parent.verticalCenter
-            visible:                !ScreenTools.isMobile
-            Connections {
-                target: ScreenTools
-                onRepaintRequestedChanged: {
-                    setupButton.repaintChevron   = true;
-                    planButton.repaintChevron    = true;
-                    flyButton.repaintChevron     = true;
-                    analyzeButton.repaintChevron = true;
-                }
-            }
-
-            ExclusiveGroup { id: mainActionGroup }
-
-            QGCToolBarButton {
-                id: setupButton
-                width: getProportionalDimmension(90)
-                height: cellHeight
-                exclusiveGroup: mainActionGroup
-                text: qsTr("Setup")
-                anchors.verticalCenter: parent.verticalCenter
-                checked: (mainToolBar.currentView === MainToolBar.ViewSetup)
-                onClicked: {
-                    mainToolBar.onSetupView();
-                }
-                z: 1000
-            }
-
-            QGCToolBarButton {
-                id: planButton
-                width: getProportionalDimmension(90)
-                height: cellHeight
-                exclusiveGroup: mainActionGroup
-                text: qsTr("Plan")
-                anchors.verticalCenter: parent.verticalCenter
-                checked: (mainToolBar.currentView === MainToolBar.ViewPlan)
-                onClicked: {
-                    mainToolBar.onPlanView();
-                }
-                z: 900
-            }
-
-            QGCToolBarButton {
-                id: flyButton
-                width: getProportionalDimmension(90)
-                height: cellHeight
-                exclusiveGroup: mainActionGroup
-                text: qsTr("Fly")
-                anchors.verticalCenter: parent.verticalCenter
-                checked: (mainToolBar.currentView === MainToolBar.ViewFly)
-                onClicked: {
-                    mainToolBar.onFlyView();
-                }
-                z: 800
-            }
-
-            QGCToolBarButton {
-                id: analyzeButton
-                width: getProportionalDimmension(90)
-                height: cellHeight
-                exclusiveGroup: mainActionGroup
-                text: qsTr("Analyze")
-                anchors.verticalCenter: parent.verticalCenter
-                checked: (mainToolBar.currentView === MainToolBar.ViewAnalyze)
-                onClicked: {
-                    mainToolBar.onAnalyzeView();
-                }
-                z: 700
-            }
-
-        }
-
-        //---------------------------------------------------------------------
-        //-- Indicators
-        Row {
-            id:                     row12
-            height:                 cellHeight
-            spacing:                cellSpacerSize
-            anchors.verticalCenter: parent.verticalCenter
-
-            //-- "Hamburger" menu for Mobile Devices
-            Item {
-                id:         actionButton
-                visible:    ScreenTools.isMobile
-                height:     cellHeight
-                width:      cellHeight
-                Image {
-                    id:             buttomImg
-                    anchors.fill:   parent
-                    source:         "/qml/buttonMore.svg"
-                    mipmap:         true
-                    smooth:         true
-                    antialiasing:   true
-                    fillMode:       Image.PreserveAspectFit
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton
-                    onClicked: {
-                        if (mouse.button == Qt.LeftButton)
-                        {
-                            maintMenu.popup();
-                        }
-                    }
-                }
-            }
-
-            //-- Separator if Hamburger menu is visible
-            Rectangle {
-                visible:    actionButton.visible
-                height:     cellHeight
-                width:      cellHeight
-                color:      "#00000000"
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Rectangle {
-                id: messages
-                width: (mainToolBar.messageCount > 99) ? getProportionalDimmension(65) : getProportionalDimmension(60)
-                height: cellHeight
-                visible: (mainToolBar.connectionCount > 0) && (mainToolBar.showMessages)
-                anchors.verticalCenter: parent.verticalCenter
-                color:  getMessageColor()
-                border.color: "#00000000"
-                border.width: 0
-                property bool showTriangle: false
-
-                Image {
-                    id: messageIcon
-                    source: getMessageIcon();
-                    height: getProportionalDimmension(16)
-                    fillMode: Image.PreserveAspectFit
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: getProportionalDimmension(8)
-                }
-
-                Item {
-                    id: messageTextRect
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right: parent.right
-                    width: messages.width - messageIcon.width
-                    QGCLabel {
-                        id: messageText
-                        text: (mainToolBar.messageCount > 0) ? mainToolBar.messageCount : ''
-                        font.pointSize: ScreenTools.fontPointFactor * (14);
-                        font.weight: Font.DemiBold
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        horizontalAlignment: Text.AlignHCenter
-                        color: colorWhite
-                    }
-                }
-
-                Image {
-                    id: dropDown
-                    source: "QGroundControl/Controls/arrow-down.png"
-                    visible: (messages.showTriangle) && (mainToolBar.messageCount > 0)
-                    anchors.bottom: parent.bottom
-                    anchors.right: parent.right
-                    anchors.bottomMargin: getProportionalDimmension(3)
-                    anchors.rightMargin:  getProportionalDimmension(3)
-                }
-
-                Timer {
-                    id: mouseOffTimer
-                    interval: 2000;
-                    running: false;
-                    repeat: false
-                    onTriggered: {
-                        messages.showTriangle = false;
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: {
-                        messages.showTriangle = true;
-                        mouseOffTimer.start();
-                    }
-                    onClicked: {
-                        var p = mapToItem(toolBarHolder, mouseX, mouseY);
-                        mainToolBar.onEnterMessageArea(p.x, p.y);
-                    }
-                }
-
-            }
-
-            Rectangle {
-                id: mavIcon
-                width: cellHeight
-                height: cellHeight
-                visible: showMavStatus() &&  (mainToolBar.showMav)
-                anchors.verticalCenter: parent.verticalCenter
-                color: colorBlue
-                border.color: "#00000000"
-                border.width: 0
-                Image {
-                    source: MavManager.systemPixmap
-                    height: cellHeight * 0.75
-                    fillMode: Image.PreserveAspectFit
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-            }
-
-            Rectangle {
-                id: satelitte
-                width:  getProportionalDimmension(55)
-                height: cellHeight
-                visible: showMavStatus() && (mainToolBar.showGPS)
-                anchors.verticalCenter: parent.verticalCenter
-                color:  getSatelliteColor();
-                border.color: "#00000000"
-                border.width: 0
-
-                Image {
-                    source: "qrc:/res/Gps";
-                    height: getProportionalDimmension(24)
-                    fillMode: Image.PreserveAspectFit
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: getProportionalDimmension(6)
-                    mipmap: true
-                    smooth: true
-                }
-
-                QGCLabel {
-                    id: satelitteText
-                    text: MavManager.satelliteCount >= 0 ? MavManager.satelliteCount : 'NA'
-                    font.pointSize: MavManager.satelliteCount >= 0 ? ScreenTools.fontPointFactor * (14) : ScreenTools.fontPointFactor * (10)
-                    font.weight: Font.DemiBold
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right: parent.right
-                    anchors.rightMargin: getProportionalDimmension(6)
-                    horizontalAlignment: Text.AlignRight
-                    color: colorWhite
-                }
-            }
-
-            Rectangle {
-                id: rssiRC
-                width:  getProportionalDimmension(55)
-                height: cellHeight
-                visible: showMavStatus() && mainToolBar.showRSSI && mainToolBar.remoteRSSI <= 100
-                anchors.verticalCenter: parent.verticalCenter
-                color:  getRSSIColor(mainToolBar.remoteRSSI);
-                border.color: "#00000000"
-                border.width: 0
-                Image {
-                    source: "qrc:/res/AntennaRC";
-                    width: cellHeight * 0.7
-                    fillMode: Image.PreserveAspectFit
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: getProportionalDimmension(6)
-                    mipmap: true
-                    smooth: true
-                }
-                QGCLabel {
-                    text: mainToolBar.remoteRSSI
-                    anchors.right: parent.right
-                    anchors.rightMargin: getProportionalDimmension(6)
-                    anchors.verticalCenter: parent.verticalCenter
-                    horizontalAlignment: Text.AlignRight
-                    font.pointSize: ScreenTools.fontPointFactor * (12);
-                    font.weight: Font.DemiBold
-                    color: colorWhite
-                }
-            }
-
-            Rectangle {
-                id: rssiTelemetry
-                width:  getProportionalDimmension(80)
-                height: cellHeight
-                visible: showMavStatus() && (mainToolBar.showRSSI) && ((mainToolBar.telemetryRRSSI > 0) && (mainToolBar.telemetryLRSSI > 0))
-                anchors.verticalCenter: parent.verticalCenter
-                color:  getRSSIColor(Math.min(mainToolBar.telemetryRRSSI,mainToolBar.telemetryLRSSI));
-                border.color: "#00000000"
-                border.width: 0
-                Image {
-                    source: "qrc:/res/AntennaT";
-                    width: cellHeight * 0.7
-                    fillMode: Image.PreserveAspectFit
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: getProportionalDimmension(6)
-                    mipmap: true
-                    smooth: true
-                }
-                Column {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right:          parent.right
-                    anchors.rightMargin:    getProportionalDimmension(6)
-                    Row {
-                        anchors.right: parent.right
-                        QGCLabel {
-                            text: 'R '
-                            font.pointSize: ScreenTools.fontPointFactor * (11);
-                            font.weight: Font.DemiBold
-                            color: colorWhite
-                        }
-                        QGCLabel {
-                            text: mainToolBar.telemetryRRSSI + 'dB'
-                            width: getProportionalDimmension(30)
-                            horizontalAlignment: Text.AlignRight
-                            font.pointSize: ScreenTools.fontPointFactor * (11);
-                            font.weight: Font.DemiBold
-                            color: colorWhite
-                        }
-                    }
-                    Row {
-                        anchors.right: parent.right
-                        QGCLabel {
-                            text: 'L '
-                            font.pointSize: ScreenTools.fontPointFactor * (11);
-                            font.weight: Font.DemiBold
-                            color: colorWhite
-                        }
-                        QGCLabel {
-                            text: mainToolBar.telemetryLRSSI + 'dB'
-                            width: getProportionalDimmension(30)
-                            horizontalAlignment: Text.AlignRight
-                            font.pointSize: ScreenTools.fontPointFactor * (11);
-                            font.weight: Font.DemiBold
-                            color: colorWhite
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                id: batteryStatus
-                width:  MavManager.batteryConsumed < 0.0 ? getProportionalDimmension(60) : getProportionalDimmension(80)
-                height: cellHeight
-                visible: showMavStatus() && (mainToolBar.showBattery)
-                anchors.verticalCenter: parent.verticalCenter
-                color:  getBatteryColor();
-                border.color: "#00000000"
-                border.width: 0
-                Image {
-                    source: getBatteryIcon();
-                    height: getProportionalDimmension(20)
-                    fillMode: Image.PreserveAspectFit
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: getProportionalDimmension(6)
-                    mipmap: true
-                    smooth: true
-                }
-
-                QGCLabel {
-                    visible: batteryStatus.visible && MavManager.batteryConsumed < 0.0
-                    text: MavManager.batteryVoltage.toFixed(1) + 'V';
-                    font.pointSize: ScreenTools.fontPointFactor * (11);
-                    font.weight: Font.DemiBold
-                    anchors.right: parent.right
-                    anchors.rightMargin: getProportionalDimmension(6)
-                    anchors.verticalCenter: parent.verticalCenter
-                    horizontalAlignment: Text.AlignRight
-                    color: colorWhite
-                }
-
-                Column {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right:          parent.right
-                    anchors.rightMargin:    getProportionalDimmension(6)
-                    visible: batteryStatus.visible && MavManager.batteryConsumed >= 0.0
-                    QGCLabel {
-                        text: MavManager.batteryVoltage.toFixed(1) + 'V';
-                        width: getProportionalDimmension(30)
-                        horizontalAlignment: Text.AlignRight
-                        font.pointSize: ScreenTools.fontPointFactor * (11);
-                        font.weight: Font.DemiBold
-                        color: colorWhite
-                    }
-                    QGCLabel {
-                        text: MavManager.batteryConsumed.toFixed(0) + 'mA';
-                        width: getProportionalDimmension(30)
-                        horizontalAlignment: Text.AlignRight
-                        font.pointSize: ScreenTools.fontPointFactor * (11);
-                        font.weight: Font.DemiBold
-                        color: colorWhite
-                    }
-                }
-            }
+        Rectangle {
+            width:  gpsCol.width   + ScreenTools.defaultFontPixelWidth  * 3
+            height: gpsCol.height  + ScreenTools.defaultFontPixelHeight * 2
+            radius: ScreenTools.defaultFontPixelHeight * 0.5
+            color:  qgcPal.window
 
             Column {
-                visible: showMavStatus()
-                height:  cellHeight * 0.85
-                width:   getProportionalDimmension(80)
-                anchors.verticalCenter: parent.verticalCenter
-
-                Rectangle {
-                    id: armedStatus
-                    width: parent.width
-                    height: parent.height / 2
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    color: "#00000000"
-                    border.color: "#00000000"
-                    border.width: 0
-
-                    QGCLabel {
-                        id: armedStatusText
-                        text: (MavManager.systemArmed) ? qsTr("ARMED") :  qsTr("DISARMED")
-                        font.pointSize: ScreenTools.fontPointFactor * (12);
-                        font.weight: Font.DemiBold
-                        anchors.centerIn: parent
-                        color: (MavManager.systemArmed) ? colorOrangeText : colorGreenText
-                    }
-                }
-
-                Rectangle {
-                    id: stateStatus
-                    width: parent.width
-                    height: parent.height / 2
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    color: "#00000000"
-                    border.color: "#00000000"
-                    border.width: 0
-
-                    QGCLabel {
-                        id: stateStatusText
-                        text: MavManager.currentState
-                        font.pointSize: ScreenTools.fontPointFactor * (12);
-                        font.weight: Font.DemiBold
-                        anchors.centerIn: parent
-                        color: (MavManager.currentState === "STANDBY") ? colorGreenText : colorRedText
-                    }
-                }
-
-            }
-
-            Rectangle {
-                id: modeStatus
-                width: getProportionalDimmension(90)
-                height: cellHeight
-                visible: showMavStatus()
-                color: "#00000000"
-                border.color: "#00000000"
-                border.width: 0
+                id:                 gpsCol
+                spacing:            ScreenTools.defaultFontPixelHeight * 0.5
+                width:              Math.max(gpsGrid.width, gpsLabel.width)
+                anchors.margins:    ScreenTools.defaultFontPixelHeight
+                anchors.centerIn:   parent
 
                 QGCLabel {
-                    id: modeStatusText
-                    text: MavManager.currentMode
-                    font.pointSize: ScreenTools.fontPointFactor * (12);
-                    font.weight: Font.DemiBold
+                    id:         gpsLabel
+                    text:       (activeVehicle && activeVehicle.gps.count.value >= 0) ? qsTr("GPS Status") : qsTr("GPS Data Unavailable")
+                    font.weight:Font.DemiBold
                     anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: colorWhiteText
+                }
+
+                GridLayout {
+                    id:                 gpsGrid
+                    visible:            (activeVehicle && activeVehicle.gps.count.value >= 0)
+                    anchors.margins:    ScreenTools.defaultFontPixelHeight
+                    columnSpacing:      ScreenTools.defaultFontPixelWidth
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    columns: 2
+
+                    QGCLabel { text: qsTr("GPS Count:") }
+                    QGCLabel { text: activeVehicle ? activeVehicle.gps.count.valueString : qsTr("N/A", "No data to display") }
+                    QGCLabel { text: qsTr("GPS Lock:") }
+                    QGCLabel { text: activeVehicle ? activeVehicle.gps.lock.enumStringValue : qsTr("N/A", "No data to display") }
+                    QGCLabel { text: qsTr("HDOP:") }
+                    QGCLabel { text: activeVehicle ? activeVehicle.gps.hdop.valueString : qsTr("--.--", "No data to display") }
+                    QGCLabel { text: qsTr("VDOP:") }
+                    QGCLabel { text: activeVehicle ? activeVehicle.gps.vdop.valueString : qsTr("--.--", "No data to display") }
+                    QGCLabel { text: qsTr("Course Over Ground:") }
+                    QGCLabel { text: activeVehicle ? activeVehicle.gps.courseOverGround.valueString : qsTr("--.--", "No data to display") }
                 }
             }
 
-            Rectangle {
-                id: connectionStatus
-                width: getProportionalDimmension(160)
-                height: cellHeight
-                visible: (mainToolBar.connectionCount > 0 && MavManager.mavPresent && MavManager.heartbeatTimeout != 0)
-                anchors.verticalCenter: parent.verticalCenter
-                color: "#00000000"
-                border.color: "#00000000"
-                border.width: 0
-
-                QGCLabel {
-                    id: connectionStatusText
-                    text: qsTr("CONNECTION LOST")
-                    font.pointSize: ScreenTools.fontPointFactor * (14);
-                    font.weight: Font.DemiBold
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    color: colorRedText
-                }
+            Component.onCompleted: {
+                var pos = mapFromItem(toolBar, centerX - (width / 2), toolBar.height)
+                x = pos.x
+                y = pos.y + ScreenTools.defaultFontPixelHeight
             }
         }
     }
 
+    //---------------------------------------------
+    // Battery Info
+    Component {
+        id: batteryInfo
+
+        Rectangle {
+            width:  battCol.width   + ScreenTools.defaultFontPixelWidth  * 3
+            height: battCol.height  + ScreenTools.defaultFontPixelHeight * 2
+            radius: ScreenTools.defaultFontPixelHeight * 0.5
+            color:  qgcPal.window
+
+            Column {
+                id:                 battCol
+                spacing:            ScreenTools.defaultFontPixelHeight * 0.5
+                width:              Math.max(battGrid.width, battLabel.width)
+                anchors.margins:    ScreenTools.defaultFontPixelHeight
+                anchors.centerIn:   parent
+
+                QGCLabel {
+                    id:         battLabel
+                    text:       qsTr("Battery Status")
+                    font.weight:Font.DemiBold
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                GridLayout {
+                    id:                 battGrid
+                    anchors.margins:    ScreenTools.defaultFontPixelHeight
+                    columnSpacing:      ScreenTools.defaultFontPixelWidth
+                    columns:            2
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    QGCLabel { text: qsTr("Voltage:") }
+                    QGCLabel { text: (activeVehicle && activeVehicle.battery.voltage.value != -1) ? (activeVehicle.battery.voltage.valueString + " " + activeVehicle.battery.voltage.units) : "N/A" }
+                    QGCLabel { text: qsTr("Accumulated Consumption:") }
+                    QGCLabel { text: (activeVehicle && activeVehicle.battery.mahConsumed.value != -1) ? (activeVehicle.battery.mahConsumed.valueString + " " + activeVehicle.battery.mahConsumed.units) : "N/A" }
+                }
+            }
+
+            Component.onCompleted: {
+                var pos = mapFromItem(toolBar, centerX - (width / 2), toolBar.height)
+                x = pos.x
+                y = pos.y + ScreenTools.defaultFontPixelHeight
+            }
+        }
+    }
+
+    //---------------------------------------------
+    // RC RSSI Info
+    Component {
+        id: rcRSSIInfo
+
+        Rectangle {
+            width:  rcrssiCol.width   + ScreenTools.defaultFontPixelWidth  * 3
+            height: rcrssiCol.height  + ScreenTools.defaultFontPixelHeight * 2
+            radius: ScreenTools.defaultFontPixelHeight * 0.5
+            color:  qgcPal.window
+
+            Column {
+                id:                 rcrssiCol
+                spacing:            ScreenTools.defaultFontPixelHeight * 0.5
+                width:              Math.max(rcrssiGrid.width, rssiLabel.width)
+                anchors.margins:    ScreenTools.defaultFontPixelHeight
+                anchors.centerIn:   parent
+
+                QGCLabel {
+                    id:         rssiLabel
+                    text:       activeVehicle ? (activeVehicle.rcRSSI > 0 ? qsTr("RC RSSI Status") : qsTr("RC RSSI Data Unavailable")) : qsTr("N/A", "No data avaliable")
+                    font.weight:Font.DemiBold
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                GridLayout {
+                    id:                 rcrssiGrid
+                    visible:            activeVehicle && activeVehicle.rcRSSI > 0
+                    anchors.margins:    ScreenTools.defaultFontPixelHeight
+                    columnSpacing:      ScreenTools.defaultFontPixelWidth
+                    columns:            2
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    QGCLabel { text: qsTr("RSSI:") }
+                    QGCLabel { text: activeVehicle ? (activeVehicle.rcRSSI + "%") : 0 }
+                }
+            }
+
+            Component.onCompleted: {
+                var pos = mapFromItem(toolBar, centerX - (width / 2), toolBar.height)
+                x = pos.x
+                y = pos.y + ScreenTools.defaultFontPixelHeight
+            }
+        }
+    }
+
+    //---------------------------------------------
+    // Telemetry RSSI Info
+    Component {
+        id: telemRSSIInfo
+
+        Rectangle {
+            width:  telemCol.width   + ScreenTools.defaultFontPixelWidth  * 3
+            height: telemCol.height  + ScreenTools.defaultFontPixelHeight * 2
+            radius: ScreenTools.defaultFontPixelHeight * 0.5
+            color:  qgcPal.window
+
+            Column {
+                id:                 telemCol
+                spacing:            ScreenTools.defaultFontPixelHeight * 0.5
+                width:              Math.max(telemGrid.width, telemLabel.width)
+                anchors.margins:    ScreenTools.defaultFontPixelHeight
+                anchors.centerIn:   parent
+
+                QGCLabel {
+                    id:             telemLabel
+                    text:           qsTr("Telemetry RSSI Status")
+                    font.weight:    Font.DemiBold
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                GridLayout {
+                    id:                 telemGrid
+                    anchors.margins:    ScreenTools.defaultFontPixelHeight
+                    columnSpacing:      ScreenTools.defaultFontPixelWidth
+                    columns:            2
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    QGCLabel { text: qsTr("Local RSSI:") }
+                    QGCLabel { text: _controller.telemetryLRSSI + " dBm" }
+                    QGCLabel { text: qsTr("Remote RSSI:") }
+                    QGCLabel { text: _controller.telemetryRRSSI + " dBm" }
+                    QGCLabel { text: qsTr("RX Errors:") }
+                    QGCLabel { text: _controller.telemetryRXErrors }
+                    QGCLabel { text: qsTr("Errors Fixed:") }
+                    QGCLabel { text: _controller.telemetryFixed }
+                    QGCLabel { text: qsTr("TX Buffer:") }
+                    QGCLabel { text: _controller.telemetryTXBuffer }
+                    QGCLabel { text: qsTr("Local Noise:") }
+                    QGCLabel { text: _controller.telemetryLNoise }
+                    QGCLabel { text: qsTr("Remote Noise:") }
+                    QGCLabel { text: _controller.telemetryRNoise }
+                }
+            }
+
+            Component.onCompleted: {
+                var pos = mapFromItem(toolBar, centerX - (width / 2), toolBar.height)
+                x = pos.x
+                y = pos.y + ScreenTools.defaultFontPixelHeight
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.left:   parent.left
+        anchors.right:  parent.right
+        anchors.bottom: parent.bottom
+        height:         1
+        color:          "black"
+        visible:        qgcPal.globalTheme == QGCPalette.Light
+    }
+
+    //---------------------------------------------
+    // Logo (Preferences Button)
+    Rectangle {
+        id:                     preferencesButton
+        width:                  mainWindow.tbButtonWidth * 1.25
+        height:                 parent.height
+        anchors.top:            parent.top
+        anchors.left:           parent.left
+        color:                  "#4A2C6D"
+        Image {
+            height:                 mainWindow.tbCellHeight
+            anchors.centerIn:       parent
+            source:                 "/res/QGCLogoWhite"
+            fillMode:               Image.PreserveAspectFit
+            smooth:                 true
+            mipmap:                 true
+            antialiasing:           true
+        }
+        /* Experimenting with a white/black divider
+        Rectangle {
+            color:      qgcPal.globalTheme === QGCPalette.Light ? Qt.rgba(0,0,0,0.15) : Qt.rgba(1,1,1,0.15)
+            height: parent.height
+            width:  1
+            anchors.right:  parent.right
+            anchors.top:    parent.top
+        }
+        */
+        MouseArea {
+            anchors.fill: parent
+            onClicked: mainWindow.showLeftMenu()
+        }
+    }
+
+    //---------------------------------------------
+    // Toolbar Row
     Row {
-        id: row2
-        height: cellHeight
-        spacing: cellSpacerSize
-        anchors.right: parent.right
+        id:                     viewRow
+        height:                 mainWindow.tbCellHeight
+        spacing:                mainWindow.tbSpacing
+        anchors.left:           preferencesButton.right
+        anchors.leftMargin:     mainWindow.tbSpacing
+        anchors.bottomMargin:   1
+        anchors.top:            parent.top
+        anchors.bottom:         parent.bottom
+
+        ExclusiveGroup { id: mainActionGroup }
+
+        QGCToolBarButton {
+            id:                 setupButton
+            width:              mainWindow.tbButtonWidth
+            anchors.top:        parent.top
+            anchors.bottom:     parent.bottom
+            exclusiveGroup:     mainActionGroup
+            source:             "/qmlimages/Gears.svg"
+            onClicked:          toolBar.showSetupView()
+        }
+
+        QGCToolBarButton {
+            id:                 planButton
+            width:              mainWindow.tbButtonWidth
+            anchors.top:        parent.top
+            anchors.bottom:     parent.bottom
+            exclusiveGroup:     mainActionGroup
+            source:             "/qmlimages/Plan.svg"
+            onClicked:          toolBar.showPlanView()
+        }
+
+        QGCToolBarButton {
+            id:                 flyButton
+            width:              mainWindow.tbButtonWidth
+            anchors.top:        parent.top
+            anchors.bottom:     parent.bottom
+            exclusiveGroup:     mainActionGroup
+            source:             "/qmlimages/PaperPlane.svg"
+            onClicked:          toolBar.showFlyView()
+        }
+    }
+
+    Item {
+        id:                     vehicleIndicators
+        height:                 mainWindow.tbCellHeight
+        anchors.leftMargin:     mainWindow.tbSpacing * 2
+        anchors.left:           viewRow.right
+        anchors.right:          parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin:  getProportionalDimmension(10)
-        anchors.rightMargin: getProportionalDimmension(10)
 
-        Menu {
-            id: connectMenu
-            Component.onCompleted: {
-                mainToolBar.configListChanged.connect(connectMenu.updateConnectionList);
-                connectMenu.updateConnectionList();
-            }
-            function addMenuEntry(name) {
-                var label = "Add Connection"
-                if(name !== "")
-                    label = name;
-                var mItem = connectMenu.addItem(label);
-                var menuSlot = function() {mainToolBar.onConnect(name)};
-                mItem.triggered.connect(menuSlot);
-            }
-            function updateConnectionList() {
-                connectMenu.clear();
-                for(var i = 0; i < mainToolBar.configList.length; i++) {
-                    connectMenu.addMenuEntry(mainToolBar.configList[i]);
-                }
-                if(mainToolBar.configList.length > 0) {
-                    connectMenu.addSeparator();
-                }
-                // Add "Add Connection" to the list
-                connectMenu.addMenuEntry("");
-            }
-        }
+        property bool vehicleConnectionLost: activeVehicle ? activeVehicle.connectionLost : false
 
-        QGCButton {
-            id:         connectButton
-            width:      getProportionalDimmension(100)
-            visible:    mainToolBar.connectionCount === 0
-            text:       qsTr("Connect")
-            menu:       connectMenu
+        Loader {
+            source:                 activeVehicle && !parent.vehicleConnectionLost ? "MainToolBarIndicators.qml" : ""
+            anchors.left:           parent.left
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        QGCButton {
-            id:         disconnectButton
-            width:      getProportionalDimmension(100)
-            visible:    mainToolBar.connectionCount === 1
-            text:       qsTr("Disconnect")
+        QGCLabel {
+            id:                     connectionLost
+            text:                   qsTr("COMMUNICATION LOST")
+            font.pixelSize:         tbFontLarge
+            font.weight:            Font.DemiBold
+            color:                  colorRed
+            anchors.rightMargin:    ScreenTools.defaultFontPixelWidth
+            anchors.right:          disconnectButton.left
             anchors.verticalCenter: parent.verticalCenter
-            onClicked: {
-                mainToolBar.onDisconnect("");
-            }
-        }
+            visible:                parent.vehicleConnectionLost
 
-        Menu {
-            id: disconnectMenu
-            Component.onCompleted: {
-                mainToolBar.connectedListChanged.connect(disconnectMenu.onConnectedListChanged)
-            }
-            function addMenuEntry(name) {
-                var mItem = disconnectMenu.addItem(name);
-                var menuSlot = function() {mainToolBar.onDisconnect(name)};
-                mItem.triggered.connect(menuSlot);
-            }
-            function onConnectedListChanged(conList) {
-                disconnectMenu.clear();
-                for(var i = 0; i < conList.length; i++) {
-                    disconnectMenu.addMenuEntry(conList[i]);
-                }
-            }
         }
 
         QGCButton {
-            id:         multidisconnectButton
-            width:      getProportionalDimmension(100)
-            text:       "Disconnect"
-            visible:    mainToolBar.connectionCount > 1
-            menu:       disconnectMenu
+            id:                     disconnectButton
+            anchors.rightMargin:     mainWindow.tbSpacing * 2
+            anchors.right:          parent.right
             anchors.verticalCenter: parent.verticalCenter
+            text:                   qsTr("Disconnect")
+            visible:                parent.vehicleConnectionLost
+            primary:                true
+            onClicked:              activeVehicle.disconnectInactiveVehicle()
         }
-
     }
 
     // Progress bar
     Rectangle {
-        readonly property int progressBarHeight: getProportionalDimmension(3)
-        y:      parent.height  - progressBarHeight
-        height: progressBarHeight
-        width:  parent.width * mainToolBar.progressBarValue
-        color:  qgcPal.text
+        id:             progressBar
+        anchors.bottom: parent.bottom
+        height:         toolBar.height * 0.05
+        width:          parent.width * _controller.progressBarValue
+        color:          colorGreen
     }
-}
 
+}

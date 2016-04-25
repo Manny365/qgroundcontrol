@@ -25,27 +25,25 @@
 ///     @author Don Gagne <don@thegagnes.com>
 
 #include "FactSystem.h"
-#include "UASManager.h"
-#include "QGCApplication.h"
-#include "VehicleComponent.h"
+#include "FactGroup.h"
 #include "FactPanelController.h"
 
 #include <QtQml>
 
-IMPLEMENT_QGC_SINGLETON(FactSystem, FactSystem)
-
 const char* FactSystem::_factSystemQmlUri = "QGroundControl.FactSystem";
 
-FactSystem::FactSystem(QObject* parent) :
-    QGCSingleton(parent)
+FactSystem::FactSystem(QGCApplication* app)
+    : QGCTool(app)
 {
-    
-    qmlRegisterType<Fact>(_factSystemQmlUri, 1, 0, "Fact");
-    qmlRegisterType<FactPanelController>(_factSystemQmlUri, 1, 0, "FactPanelController");
-    qmlRegisterUncreatableType<VehicleComponent>(_factSystemQmlUri, 1, 0, "VehicleComponent", "Can only reference, cannot create");
+
 }
 
-FactSystem::~FactSystem()
+void FactSystem::setToolbox(QGCToolbox *toolbox)
 {
+    QGCTool::setToolbox(toolbox);
 
+    qmlRegisterType<Fact>               (_factSystemQmlUri, 1, 0, "Fact");
+    qmlRegisterType<FactPanelController>(_factSystemQmlUri, 1, 0, "FactPanelController");
+
+    qmlRegisterUncreatableType<FactGroup>(_factSystemQmlUri, 1, 0, "FactGroup", "ReferenceOnly");
 }

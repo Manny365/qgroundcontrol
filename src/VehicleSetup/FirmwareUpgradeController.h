@@ -28,6 +28,8 @@
 #define FirmwareUpgradeController_H
 
 #include "PX4FirmwareUpgradeThread.h"
+#include "LinkManager.h"
+#include "FirmwareImage.h"
 
 #include <QObject>
 #include <QUrl>
@@ -41,47 +43,98 @@
 
 #include <stdint.h>
 
+/// Supported firmware types. If you modify these you will need to update the qml file as well.
+
 // Firmware Upgrade MVC Controller for FirmwareUpgrade.qml.
 class FirmwareUpgradeController : public QObject
 {
     Q_OBJECT
     
 public:
-    FirmwareUpgradeController(void);
-    
-    /// Supported firmware types. If you modify these you will need to update the qml file as well.
-    typedef enum {
-        StableFirmware,
-        BetaFirmware,
-        DeveloperFirmware,
-        CustomFirmware
-    } FirmwareType_t;
+        typedef enum {
+            AutoPilotStackPX4,
+            AutoPilotStackAPM,
+            PX4Flow,
+            ThreeDRRadio
+        } AutoPilotStackType_t;
 
-    Q_ENUMS(FirmwareType_t)
-    
-    /// Firmare type to load
-    Q_PROPERTY(FirmwareType_t firmwareType READ firmwareType WRITE setFirmwareType)
-    
-    /// Upgrade push button in UI
-    Q_PROPERTY(QQuickItem* upgradeButton READ upgradeButton WRITE setUpgradeButton)
+        typedef enum {
+            StableFirmware,
+            BetaFirmware,
+            DeveloperFirmware,
+            CustomFirmware
+        } FirmwareType_t;
+
+        typedef enum {
+            QuadFirmware,
+            X8Firmware,
+            HexaFirmware,
+            OctoFirmware,
+            YFirmware,
+            Y6Firmware,
+            HeliFirmware,
+            PlaneFirmware,
+            RoverFirmware,
+            DefaultVehicleFirmware
+        } FirmwareVehicleType_t;
+
+        Q_ENUMS(AutoPilotStackType_t)
+        Q_ENUMS(FirmwareType_t)
+        Q_ENUMS(FirmwareVehicleType_t)
+
+    class FirmwareIdentifier
+    {
+    public:
+        FirmwareIdentifier(AutoPilotStackType_t stack = AutoPilotStackPX4,
+                           FirmwareType_t firmware = StableFirmware,
+                           FirmwareVehicleType_t vehicle = DefaultVehicleFirmware)
+            : autopilotStackType(stack), firmwareType(firmware), firmwareVehicleType(vehicle) {}
+
+        bool operator==(const FirmwareIdentifier& firmwareId) const
+        {
+            return (firmwareId.autopilotStackType == autopilotStackType &&
+                    firmwareId.firmwareType == firmwareType &&
+                    firmwareId.firmwareVehicleType == firmwareVehicleType);
+        }
+
+        // members
+        AutoPilotStackType_t    autopilotStackType;
+        FirmwareType_t          firmwareType;
+        FirmwareVehicleType_t   firmwareVehicleType;
+    };
+
+    FirmwareUpgradeController(void);
+    ~FirmwareUpgradeController();
+
+    Q_PROPERTY(QString          boardPort                   READ boardPort                                              NOTIFY boardFound)
+    Q_PROPERTY(QString          boardDescription            READ boardDescription                                       NOTIFY boardFound)
+    Q_PROPERTY(QString          boardType                   MEMBER _foundBoardTypeName                                  NOTIFY boardFound)
+    Q_PROPERTY(FirmwareType_t   selectedFirmwareType        READ selectedFirmwareType   WRITE setSelectedFirmwareType   NOTIFY selectedFirmwareTypeChanged)
+    Q_PROPERTY(QStringList      apmAvailableVersions        READ apmAvailableVersions                                   NOTIFY apmAvailableVersionsChanged)
 
     /// TextArea for log output
     Q_PROPERTY(QQuickItem* statusLog READ statusLog WRITE setStatusLog)
     
     /// Progress bar for you know what
     Q_PROPERTY(QQuickItem* progressBar READ progressBar WRITE setProgressBar)
-    
-    Q_INVOKABLE bool activeQGCConnections(void);
-    Q_INVOKABLE bool pluggedInBoard(void);
-    
-    /// Begins the firware upgrade process
-    Q_INVOKABLE void doFirmwareUpgrade(void);
 
-    FirmwareType_t firmwareType(void) { return _firmwareType; }
-    void setFirmwareType(FirmwareType_t firmwareType) { _firmwareType = firmwareType; }
+    /// Starts searching for boards on the background thread
+    Q_INVOKABLE void startBoardSearch(void);
     
-    QQuickItem* upgradeButton(void) { return _upgradeButton; }
-    void setUpgradeButton(QQuickItem* upgradeButton) { _upgradeButton = upgradeButton; }
+    /// Cancels whatever state the upgrade worker thread is in
+    Q_INVOKABLE void cancel(void);
+    
+    /// Called when the firmware type has been selected by the user to continue the flash process.
+    Q_INVOKABLE void flash(AutoPilotStackType_t stackType,
+                           FirmwareType_t firmwareType = StableFirmware,
+                           FirmwareVehicleType_t vehicleType = DefaultVehicleFirmware );
+
+    Q_INVOKABLE FirmwareVehicleType_t vehicleTypeFromVersionIndex(int index);
+    
+    // overload, not exposed to qml side
+    void flash(const FirmwareIdentifier& firmwareId);
+
+    // Property accessors
     
     QQuickItem* progressBar(void) { return _progressBar; }
     void setProgressBar(QQuickItem* progressBar) { _progressBar = progressBar; }
@@ -89,48 +142,75 @@ public:
     QQuickItem* statusLog(void) { return _statusLog; }
     void setStatusLog(QQuickItem* statusLog) { _statusLog = statusLog; }
     
+    QString boardPort(void) { return _foundBoardInfo.portName(); }
+    QString boardDescription(void) { return _foundBoardInfo.description(); }
+
+    FirmwareType_t selectedFirmwareType(void) { return _selectedFirmwareType; }
+    void setSelectedFirmwareType(FirmwareType_t firmwareType);
+    QString firmwareTypeAsString(FirmwareType_t type) const;
+
+    QStringList apmAvailableVersions(void);
+
 signals:
-    void showMessage(const QString& title, const QString& message);
+    void boardFound(void);
+    void noBoardFound(void);
+    void boardGone(void);
+    void flashComplete(void);
+    void flashCancelled(void);
+    void error(void);
+    void selectedFirmwareTypeChanged(FirmwareType_t firmwareType);
+    void apmAvailableVersionsChanged(void);
     
 private slots:
     void _downloadProgress(qint64 curr, qint64 total);
     void _downloadFinished(void);
     void _downloadError(QNetworkReply::NetworkError code);
-    void _foundBoard(bool firstTry, const QString portname, QString portDescription);
+    void _foundBoard(bool firstAttempt, const QSerialPortInfo& portInfo, int boardType);
+    void _noBoardFound(void);
+    void _boardGone();
     void _foundBootloader(int bootloaderVersion, int boardID, int flashSize);
-    void _error(const int command, const QString errorString);
+    void _error(const QString& errorString);
+    void _status(const QString& statusString);
     void _bootloaderSyncFailed(void);
-    void _findTimeout(void);
-    void _complete(const int command);
+    void _flashComplete(void);
     void _updateProgress(int curr, int total);
-    void _restart(void);
+    void _eraseStarted(void);
+    void _eraseComplete(void);
     void _eraseProgressTick(void);
+    void _apmVersionDownloadFinished(QString remoteFile, QString localFile);
 
 private:
-    void _findBoard(void);
-    void _findBootloader(void);
-    void _cancel(void);
-    void _getFirmwareFile(void);
+    void _getFirmwareFile(FirmwareIdentifier firmwareId);
+    void _initFirmwareHash();
     void _downloadFirmware(void);
-    void _erase(void);
-    void _appendStatusLog(const QString& text);
-	bool _decompressJsonValue(const QJsonObject&	jsonObject,
-							  const QByteArray&     jsonDocBytes,
-							  const QString&		sizeKey,
-                              const QString&		bytesKey,
-                              QByteArray&			decompressedBytes);
-    
+    void _appendStatusLog(const QString& text, bool critical = false);
+    void _errorCancel(const QString& msg);
+    void _loadAPMVersions(QGCSerialPortInfo::BoardType_t boardType);
+    QHash<FirmwareIdentifier, QString>* _firmwareHashForBoardId(int boardId);
+    QHash<FirmwareIdentifier, QString>* _firmwareHashForBoardType(QGCSerialPortInfo::BoardType_t boardType);
+
     QString _portName;
     QString _portDescription;
-    uint32_t _bootloaderVersion;
 
-    static const int _boardIDPX4FMUV1 = 5;  ///< Board ID for PX4 V1 board
-    static const int _boardIDPX4FMUV2 = 9;  ///< Board ID for PX4 V2 board
-    static const int _boardIDPX4Flow = 6;   ///< Board ID for PX4 Flow board
+    // firmware hashes
+    QHash<FirmwareIdentifier, QString> _rgPX4FMUV4Firmware;
+    QHash<FirmwareIdentifier, QString> _rgPX4FMUV2Firmware;
+    QHash<FirmwareIdentifier, QString> _rgAeroCoreFirmware;
+    QHash<FirmwareIdentifier, QString> _rgPX4FMUV1Firmware;
+    QHash<FirmwareIdentifier, QString> _rgPX4FLowFirmware;
+    QHash<FirmwareIdentifier, QString> _rg3DRRadioFirmware;
 
-    uint32_t    _boardID;           ///< Board ID
-    uint32_t    _boardFlashSize;    ///< Flash size in bytes of board
-    uint32_t    _imageSize;         ///< Image size of firmware being flashed
+    QMap<FirmwareType_t, QMap<FirmwareVehicleType_t, QString> > _apmVersionMap;
+    QList<FirmwareVehicleType_t>                                _apmVehicleTypeFromCurrentVersionList;
+
+    /// Information which comes back from the bootloader
+    bool        _bootloaderFound;           ///< true: we have received the foundBootloader signals
+    uint32_t    _bootloaderVersion;         ///< Bootloader version
+    uint32_t    _bootloaderBoardID;         ///< Board ID
+    uint32_t    _bootloaderBoardFlashSize;  ///< Flash size in bytes of board
+    
+    bool                 _startFlashWhenBootloaderFound;
+    FirmwareIdentifier   _startFlashWhenBootloaderFoundFirmwareIdentity;
 
     QPixmap _boardIcon;             ///< Icon used to display image of board
     
@@ -150,12 +230,21 @@ private:
     static const int    _findBoardTimeoutMsec = 30000;      ///< Amount of time for user to plug in USB
     static const int    _findBootloaderTimeoutMsec = 5000;  ///< Amount time to look for bootloader
     
-    FirmwareType_t  _firmwareType;      ///< Firmware type to load
-    QQuickItem*     _upgradeButton;     ///< Upgrade button in ui
     QQuickItem*     _statusLog;         ///< Status log TextArea Qml control
     QQuickItem*     _progressBar;
     
     bool _searchingForBoard;    ///< true: searching for board, false: search for bootloader
+    
+    QSerialPortInfo                 _foundBoardInfo;
+    QGCSerialPortInfo::BoardType_t  _foundBoardType;
+    QString                         _foundBoardTypeName;
+
+    FirmwareType_t                  _selectedFirmwareType;
+
+    FirmwareImage*  _image;
 };
+
+// global hashing function
+uint qHash(const FirmwareUpgradeController::FirmwareIdentifier& firmwareId);
 
 #endif

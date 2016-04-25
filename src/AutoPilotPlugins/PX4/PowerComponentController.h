@@ -40,9 +40,10 @@ class PowerComponentController : public FactPanelController
     
 public:
     PowerComponentController(void);
-    ~PowerComponentController();
     
     Q_INVOKABLE void calibrateEsc(void);
+    Q_INVOKABLE void busConfigureActuators(void);
+    Q_INVOKABLE void stopBusConfigureActuators(void);
     
 signals:
     void oldFirmware(void);
@@ -59,6 +60,7 @@ private slots:
     
 private:
     void _stopCalibration(void);
+    void _stopBusConfig(void);
     
     QStringList _warningMessages;
     static const int _neededFirmwareRev = 1;

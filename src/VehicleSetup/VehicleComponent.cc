@@ -27,12 +27,12 @@
 #include "VehicleComponent.h"
 #include "AutoPilotPlugin.h"
 
-VehicleComponent::VehicleComponent(UASInterface* uas, AutoPilotPlugin* autopilot, QObject* parent) :
+VehicleComponent::VehicleComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent) :
     QObject(parent),
-    _uas(uas),
+    _vehicle(vehicle),
     _autopilot(autopilot)
 {
-    Q_ASSERT(uas);
+    Q_ASSERT(vehicle);
     Q_ASSERT(autopilot);
 }
 
@@ -56,4 +56,26 @@ void VehicleComponent::addSummaryQmlComponent(QQmlContext* context, QQuickItem* 
     Q_ASSERT(item);
     item->setParentItem(parent);
     item->setProperty("vehicleComponent", QVariant::fromValue(this));
+}
+
+void VehicleComponent::setupTriggerSignals(void)
+{
+    // Watch for changed on trigger list params
+    foreach (const QString &paramName, setupCompleteChangedTriggerList()) {
+        if (_autopilot->parameterExists(FactSystem::defaultComponentId, paramName)) {
+            Fact* fact = _autopilot->getParameterFact(FactSystem::defaultComponentId, paramName);
+            connect(fact, &Fact::valueChanged, this, &VehicleComponent::_triggerUpdated);
+        }
+    }
+}
+
+void VehicleComponent::_triggerUpdated(QVariant /*value*/)
+{
+    emit setupCompleteChanged(setupComplete());
+}
+
+bool VehicleComponent::allowSetupWhileArmed(void) const
+{
+    // Default is to not allow setup while armed
+    return false;
 }

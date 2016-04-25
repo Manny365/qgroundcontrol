@@ -25,15 +25,16 @@
 #define PX4AUTOPILOT_H
 
 #include "AutoPilotPlugin.h"
-#include "AutoPilotPluginManager.h"
-#include "UASInterface.h"
-#include "PX4ParameterLoader.h"
+#include "PX4AirframeLoader.h"
 #include "AirframeComponent.h"
-#include "RadioComponent.h"
+#include "PX4RadioComponent.h"
+#include "ESP8266Component.h"
 #include "FlightModesComponent.h"
 #include "SensorsComponent.h"
 #include "SafetyComponent.h"
 #include "PowerComponent.h"
+#include "PX4TuningComponent.h"
+#include "Vehicle.h"
 
 #include <QImage>
 
@@ -46,39 +47,37 @@ class PX4AutoPilotPlugin : public AutoPilotPlugin
     Q_OBJECT
 
 public:
-    PX4AutoPilotPlugin(UASInterface* uas, QObject* parent);
+    PX4AutoPilotPlugin(Vehicle* vehicle, QObject* parent);
     ~PX4AutoPilotPlugin();
 
     // Overrides from AutoPilotPlugin
     virtual const QVariantList& vehicleComponents(void);
 
-    static QList<AutoPilotPluginManager::FullMode_t> getModes(void);
-    static QString getShortModeText(uint8_t baseMode, uint32_t customMode);
-    static void clearStaticData(void);
-    
     // These methods should only be used by objects within the plugin
     AirframeComponent*      airframeComponent(void)     { return _airframeComponent; }
-    RadioComponent*         radioComponent(void)        { return _radioComponent; }
+    PX4RadioComponent*      radioComponent(void)        { return _radioComponent; }
+    ESP8266Component*       esp8266Component(void)      { return _esp8266Component; }
     FlightModesComponent*   flightModesComponent(void)  { return _flightModesComponent; }
     SensorsComponent*       sensorsComponent(void)      { return _sensorsComponent; }
     SafetyComponent*        safetyComponent(void)       { return _safetyComponent; }
     PowerComponent*         powerComponent(void)        { return _powerComponent; }
+    PX4TuningComponent*     tuningComponent(void)       { return _tuningComponent; }
 
-private slots:
-    void _pluginReadyPreChecks(void);
+public slots:
+    // FIXME: This is public until we restructure AutoPilotPlugin/FirmwarePlugin/Vehicle
+    void _parametersReadyPreChecks(bool missingParameters);
     
 private:
-	// Overrides from AutoPilotPlugin
-	virtual ParameterLoader* _getParameterLoader(void) { return _parameterFacts; }
-	
-    PX4ParameterLoader*      _parameterFacts;
+    PX4AirframeLoader*      _airframeFacts;
     QVariantList            _components;
     AirframeComponent*      _airframeComponent;
-    RadioComponent*         _radioComponent;
+    PX4RadioComponent*      _radioComponent;
+    ESP8266Component*       _esp8266Component;
     FlightModesComponent*   _flightModesComponent;
     SensorsComponent*       _sensorsComponent;
     SafetyComponent*        _safetyComponent;
     PowerComponent*         _powerComponent;
+    PX4TuningComponent*     _tuningComponent;
     bool                    _incorrectParameterVersion; ///< true: parameter version incorrect, setup not allowed
 };
 

@@ -68,8 +68,8 @@ static const struct mavType mavTypeInfo[] = {
 static size_t cMavTypes = sizeof(mavTypeInfo) / sizeof(mavTypeInfo[0]);
 #endif
 
-AirframeComponent::AirframeComponent(UASInterface* uas, AutoPilotPlugin* autopilot, QObject* parent) :
-    PX4Component(uas, autopilot, parent),
+AirframeComponent::AirframeComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent) :
+    VehicleComponent(vehicle, autopilot, parent),
     _name(tr("Airframe"))
 {
 #if 0
@@ -127,12 +127,12 @@ QString AirframeComponent::name(void) const
 QString AirframeComponent::description(void) const
 {
     return tr("The Airframe Component is used to select the airframe which matches your vehicle. "
-              "This will in turn set up the various tuning values for flight paramters.");
+              "This will in turn set up the various tuning values for flight parameters.");
 }
 
 QString AirframeComponent::iconResource(void) const
 {
-    return "AirframeComponentIcon.png";
+    return "/qmlimages/AirframeComponentIcon.png";
 }
 
 bool AirframeComponent::requiresSetup(void) const
@@ -142,19 +142,7 @@ bool AirframeComponent::requiresSetup(void) const
 
 bool AirframeComponent::setupComplete(void) const
 {
-    return _autopilot->getParameterFact(FactSystem::defaultComponentId, "SYS_AUTOSTART")->value().toInt() != 0;
-}
-
-QString AirframeComponent::setupStateDescription(void) const
-{
-    const char* stateDescription;
-    
-    if (requiresSetup()) {
-        stateDescription = "Requires calibration";
-    } else {
-        stateDescription = "Calibrated";
-    }
-    return QString(stateDescription);
+    return _autopilot->getParameterFact(FactSystem::defaultComponentId, "SYS_AUTOSTART")->rawValue().toInt() != 0;
 }
 
 QStringList AirframeComponent::setupCompleteChangedTriggerList(void) const
@@ -162,25 +150,9 @@ QStringList AirframeComponent::setupCompleteChangedTriggerList(void) const
     return QStringList("SYS_AUTOSTART");
 }
 
-QStringList AirframeComponent::paramFilterList(void) const
+QUrl AirframeComponent::setupSource(void) const
 {
-    QStringList list;
-    
-    list << "SYS_AUTOSTART";
-    
-    return list;
-}
-
-QWidget* AirframeComponent::setupWidget(void) const
-{
-    QGCQmlWidgetHolder* holder = new QGCQmlWidgetHolder();
-    Q_CHECK_PTR(holder);
-    
-    holder->setAutoPilot(_autopilot);
-    
-    holder->setSource(QUrl::fromUserInput("qrc:/qml/AirframeComponent.qml"));
-    
-    return holder;
+    return QUrl::fromUserInput("qrc:/qml/AirframeComponent.qml");
 }
 
 QUrl AirframeComponent::summaryQmlSource(void) const

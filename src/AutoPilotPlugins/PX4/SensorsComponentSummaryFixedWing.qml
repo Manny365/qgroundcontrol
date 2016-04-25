@@ -21,30 +21,30 @@ FactPanel {
     property Fact mag0IdFact:       controller.getParameterFact(-1, "CAL_MAG0_ID")
     property Fact gyro0IdFact:      controller.getParameterFact(-1, "CAL_GYRO0_ID")
     property Fact accel0IdFact:     controller.getParameterFact(-1, "CAL_ACC0_ID")
-    property Fact dpresssOffFact:   controller.getParameterFact(-1, "SENS_DPRES_OFF")
+    property Fact dpressOffFact:    controller.getParameterFact(-1, "SENS_DPRES_OFF")
 
     Column {
         anchors.fill:       parent
         anchors.margins:    8
 
         VehicleSummaryRow {
-            labelText: "Compass:"
-            valueText: mag0IdFact.value  == 0 ? "Setup required" : "Ready"
+            labelText: qsTr("Compass:")
+            valueText: mag0IdFact ? (mag0IdFact.value  === 0 ? qsTr("Setup required") : qsTr("Ready")) : ""
         }
 
         VehicleSummaryRow {
-            labelText: "Gyro:"
-            valueText: gyro0IdFact.value  == 0 ? "Setup required" : "Ready"
+            labelText: qsTr("Gyro:")
+            valueText: gyro0IdFact ? (gyro0IdFact.value === 0 ? qsTr("Setup required") : qsTr("Ready")) : ""
         }
 
         VehicleSummaryRow {
-            labelText: "Accelerometer:"
-            valueText: accel0IdFact.value  == 0 ? "Setup required" : "Ready"
+            labelText: qsTr("Accelerometer:")
+            valueText: accel0IdFact ? (accel0IdFact.value === 0 ? qsTr("Setup required") : qsTr("Ready")) : ""
         }
 
         VehicleSummaryRow {
-            labelText: "Airspeed:"
-            valueText: dPressOffFact.value  == 0 ? "Setup required" : "Ready"
+            labelText: qsTr("Airspeed:")
+            valueText: dpressOffFact ? (dpressOffFact.value === 0 ? qsTr("Setup required") : qsTr("Ready")) : ""
         }
     }
 }

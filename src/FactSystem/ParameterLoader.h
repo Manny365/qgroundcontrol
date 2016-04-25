@@ -29,17 +29,18 @@
 #include <QXmlStreamReader>
 #include <QLoggingCategory>
 #include <QMutex>
+#include <QDir>
 
 #include "FactSystem.h"
-#include "UASInterface.h"
 #include "MAVLinkProtocol.h"
 #include "AutoPilotPlugin.h"
 #include "QGCMAVLink.h"
+#include "Vehicle.h"
 
 /// @file
 ///     @author Don Gagne <don@thegagnes.com>
 
-Q_DECLARE_LOGGING_CATEGORY(ParameterLoaderLog)
+Q_DECLARE_LOGGING_CATEGORY(ParameterLoaderVerboseLog)
 
 /// Connects to Parameter Manager to load/update Facts
 class ParameterLoader : public QObject
@@ -48,16 +49,22 @@ class ParameterLoader : public QObject
     
 public:
     /// @param uas Uas which this set of facts is associated with
-    ParameterLoader(AutoPilotPlugin* autopilot, UASInterface* uas, QObject* parent = NULL);
+    ParameterLoader(Vehicle* vehicle);
     
     ~ParameterLoader();
+
+    /// @return Directory of parameter caches
+    static QDir parameterCacheDir();
+
+    /// @return Location of parameter cache file
+    static QString parameterCacheFile(int uasId, int componentId);
     
     /// Returns true if the full set of facts are ready
     bool parametersAreReady(void) { return _parametersReady; }
-    
+
     /// Re-request the full set of parameters from the autopilot
-    void refreshAllParameters(void);
-    
+    void refreshAllParameters(uint8_t componentID = MAV_COMP_ID_ALL);
+
     /// Request a refresh on the specific parameter
     void refreshParameter(int componentId, const QString& name);
     
@@ -69,27 +76,37 @@ public:
 						 const QString& name);          ///< fact name
 	
 	/// Returns all parameter names
-	/// FIXME: component id missing
-	QStringList parameterNames(void);
+	QStringList parameterNames(int componentId);
     
     /// Returns the specified Fact.
-    /// WARNING: Will assert if parameter does not exists. If that possibily exists, check for existince first with
+    /// WARNING: Will assert if parameter does not exists. If that possibily exists, check for existence first with
     /// parameterExists.
     Fact* getFact(int               componentId,    ///< fact component, -1=default component
                   const QString&    name);          ///< fact name
     
     const QMap<int, QMap<QString, QStringList> >& getGroupMap(void);
     
-    void readParametersFromStream(QTextStream& stream);
-    void writeParametersToStream(QTextStream &stream, const QString& name);
+    /// Returns error messages from loading
+    QString readParametersFromStream(QTextStream& stream);
+    
+    void writeParametersToStream(QTextStream &stream);
 
-    /// Return the parameter for which the default component id is derived from. Return an empty
-    /// string is this is not available.
-    virtual QString getDefaultComponentIdParam(void) const = 0;
+    /// Returns the version number for the parameter set, -1 if not known
+    int parameterSetVersion(void) { return _parameterSetMajorVersion; }
+
+    /// Returns the newest available parameter meta data file (from cache or internal) for the specified information.
+    ///     @param wantedMajorVersion Major version you are looking for
+    ///     @param[out] majorVersion Major version for found meta data
+    ///     @param[out] minorVersion Minor version for found meta data
+    /// @return Meta data file name of best match, emptyString is none found
+    static QString parameterMetaDataFile(MAV_AUTOPILOT firmwareType, int wantedMajorVersion, int& majorVersion, int& minorVersion);
+
+    /// If this file is newer than anything in the cache, cache it as the latest version
+    static void cacheMetaDataFile(const QString& metaDataFile, MAV_AUTOPILOT firmwareType);
     
 signals:
     /// Signalled when the full set of facts are ready
-    void parametersReady(void);
+    void parametersReady(bool missingParameters);
 
     /// Signalled to update progress of full parameter list request
     void parameterListProgress(float value);
@@ -98,16 +115,16 @@ signals:
     void restartWaitingParamTimer(void);
     
 protected:
-    /// Base implementation adds generic meta data based on variant type. Derived class can override to provide
-    /// more details meta data.
-    virtual void _addMetaDataToFact(Fact* fact);
+    Vehicle*            _vehicle;
+    MAVLinkProtocol*    _mavlink;
     
-private slots:
     void _parameterUpdate(int uasId, int componentId, QString parameterName, int parameterCount, int parameterId, int mavType, QVariant value);
     void _valueUpdated(const QVariant& value);
     void _restartWaitingParamTimer(void);
     void _waitingParamTimeout(void);
-    
+    void _tryCacheLookup(void);
+    void _initialRequestTimeout(void);
+
 private:
     static QVariant _stringToTypedVariant(const QString& string, FactMetaData::ValueType_t type, bool failOk = false);
     int _actualComponentId(int componentId);
@@ -115,40 +132,57 @@ private:
     void _setupGroupMap(void);
     void _readParameterRaw(int componentId, const QString& paramName, int paramIndex);
     void _writeParameterRaw(int componentId, const QString& paramName, const QVariant& value);
+    void _writeLocalParamCache(int uasId, int componentId);
+    void _tryCacheHashLoad(int uasId, int componentId, QVariant hash_value);
+    void _addMetaDataToDefaultComponent(void);
+    QString _remapParamNameToVersion(const QString& paramName);
+
     MAV_PARAM_TYPE _factTypeToMavType(FactMetaData::ValueType_t factType);
     FactMetaData::ValueType_t _mavTypeToFactType(MAV_PARAM_TYPE mavType);
     void _saveToEEPROM(void);
-    
-    AutoPilotPlugin*    _autopilot;
-    UASInterface*       _uas;
-    MAVLinkProtocol*    _mavlink;
+    void _checkInitialLoadComplete(bool failIfNoDefaultComponent);
+
+    LinkInterface* _dedicatedLink; ///< Parameter protocol stays on this link
     
     /// First mapping is by component id
     /// Second mapping is parameter name, to Fact* in QVariant
-    QMap<int, QVariantMap> _mapParameterName2Variant;
+    QMap<int, QVariantMap>            _mapParameterName2Variant;
+
+    QMap<int, QMap<int, QString> >    _mapParameterId2Name;
     
     /// First mapping is by component id
     /// Second mapping is group name, to Fact
     QMap<int, QMap<QString, QStringList> > _mapGroup2ParameterName;
     
-    bool _parametersReady;   ///< All params received from param mgr
-    int _defaultComponentId;
-    QString _defaultComponentIdParam;
-    
-    QMap<int, int>          _paramCountMap;             ///< Map of total known parameter count, keyed by component id
-    QMap<int, QList<int> >  _waitingReadParamIndexMap;  ///< Map of param indices waiting for initial first time read, keyed by component id
-    QMap<int, QStringList>  _waitingReadParamNameMap;   ///< Map of param names we are waiting to hear a read response from, keyed by component id
-    QMap<int, QStringList>  _waitingWriteParamNameMap;  ///< Map of param names we are waiting to hear a write response from, keyed by component id
-    
+    bool        _parametersReady;               ///< true: full set of parameters correctly loaded
+    bool        _initialLoadComplete;           ///< true: Initial load of all parameters complete, whether succesful or not
+    bool        _waitingForDefaultComponent;    ///< true: last chance wait for default component params
+    bool        _saveRequired;                  ///< true: _saveToEEPROM should be called
+    int         _defaultComponentId;
+    QString     _defaultComponentIdParam;       ///< Parameter which identifies default component
+    QString     _versionParam;                  ///< Parameter which contains parameter set version
+    int         _parameterSetMajorVersion;      ///< Version for parameter set, -1 if not known
+    QObject*    _parameterMetaData;             ///< Opaque data from FirmwarePlugin::loadParameterMetaDataCall
+
+    static const int _maxInitialLoadRetry = 10;                 ///< Maximum retries for initial index based load
+    static const int _maxReadWriteRetry = 5;                    ///< Maximum retries read/write
+
+    QMap<int, int>                  _paramCountMap;             ///< Key: Component id, Value: count of parameters in this component
+    QMap<int, QMap<int, int> >      _waitingReadParamIndexMap;  ///< Key: Component id, Value: Map { Key: parameter index still waiting for, Value: retry count }
+    QMap<int, QMap<QString, int> >  _waitingReadParamNameMap;   ///< Key: Component id, Value: Map { Key: parameter name still waiting for, Value: retry count }
+    QMap<int, QMap<QString, int> >  _waitingWriteParamNameMap;  ///< Key: Component id, Value: Map { Key: parameter name still waiting for, Value: retry count }
+    QMap<int, QList<int> >          _failedReadParamIndexMap;   ///< Key: Component id, Value: failed parameter index
+
     int _totalParamCount;   ///< Number of parameters across all components
     
+    QTimer _initialRequestTimeoutTimer;
     QTimer _waitingParamTimeoutTimer;
-    
-    bool _fullRefresh;
     
     QMutex _dataMutex;
     
     static Fact _defaultFact;   ///< Used to return default fact, when parameter not found
+
+    static const char* _cachedMetaDataFilePrefix;
 };
 
 #endif

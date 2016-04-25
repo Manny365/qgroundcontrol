@@ -28,40 +28,50 @@ This file is part of the QGROUNDCONTROL project
  *
  */
 
+#include <QtGlobal>
 #include <QApplication>
 #include <QSslSocket>
-
+#include <QProcessEnvironment>
+#include <QHostAddress>
+#include <QUdpSocket>
+#include <QtPlugin>
+#include <QStringListModel>
 #include "QGCApplication.h"
-#include "MainWindow.h"
-#include "configuration.h"
+#include "AppMessages.h"
+
+#define  SINGLE_INSTANCE_PORT   14499
+
+#ifndef __mobile__
+    #include "QGCSerialPortInfo.h"
+#endif
+
 #ifdef QT_DEBUG
-#ifndef __android__
-#include "UnitTest.h"
+    #ifndef __mobile__
+        #include "UnitTest.h"
+    #endif
+    #include "CmdLineOptParser.h"
+    #ifdef Q_OS_WIN
+        #include <crtdbg.h>
+    #endif
 #endif
-#include "CmdLineOptParser.h"
-#ifdef Q_OS_WIN
-#include <crtdbg.h>
+
+#ifdef QGC_ENABLE_BLUETOOTH
+#include <QtBluetooth/QBluetoothSocket>
 #endif
-#endif
+
+#include <iostream>
+#include "QGCMapEngine.h"
 
 /* SDL does ugly things to main() */
 #ifdef main
 #undef main
 #endif
 
+#ifndef __mobile__
+    Q_DECLARE_METATYPE(QGCSerialPortInfo)
+#endif
 
 #ifdef Q_OS_WIN
-
-/// @brief Message handler which is installed using qInstallMsgHandler so you do not need
-/// the MSFT debug tools installed to see qDebug(), qWarning(), qCritical and qAbort
-void msgHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
-{
-    const char symbols[] = { 'I', 'E', '!', 'X' };
-    QString output = QString("[%1] at %2:%3 - \"%4\"").arg(symbols[type]).arg(context.file).arg(context.line).arg(msg);
-    std::cerr << output.toStdString() << std::endl;
-    if( type == QtFatalMsg ) abort();
-}
-
 /// @brief CRT Report Hook installed using _CrtSetReportHook. We install this hook when
 /// we don't want asserts to pop a dialog on windows.
 int WindowsCrtReportHook(int reportType, char* message, int* returnValue)
@@ -75,6 +85,25 @@ int WindowsCrtReportHook(int reportType, char* message, int* returnValue)
 
 #endif
 
+#ifdef __android__
+#include <jni.h>
+#include "qserialport.h"
+
+jint JNI_OnLoad(JavaVM* vm, void* reserved)
+{
+    Q_UNUSED(reserved);
+
+    JNIEnv* env;
+    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        return -1;
+    }
+
+    QSerialPort::setNativeMethods();
+
+    return JNI_VERSION_1_6;
+}
+#endif
+
 /**
  * @brief Starts the application
  *
@@ -85,25 +114,67 @@ int WindowsCrtReportHook(int reportType, char* message, int* returnValue)
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_UNIX
+    //Force writing to the console on UNIX/BSD devices
+    if (!qEnvironmentVariableIsSet("QT_LOGGING_TO_CONSOLE"))
+        qputenv("QT_LOGGING_TO_CONSOLE", "1");
+#endif
+
+    // install the message handler
+    AppMessages::installHandler();
+
+#ifndef __mobile__
+    //-- Test for another instance already running. If that's the case, we simply exit.
+    QHostAddress host("127.0.0.1");
+    QUdpSocket socket;
+    if(!socket.bind(host, SINGLE_INSTANCE_PORT, QAbstractSocket::DontShareAddress)) {
+        qWarning() << "Another instance already running. Exiting.";
+        exit(-1);
+    }
+#endif
 
 #ifdef Q_OS_MAC
+#ifndef __ios__
     // Prevent Apple's app nap from screwing us over
     // tip: the domain can be cross-checked on the command line with <defaults domains>
     QProcess::execute("defaults write org.qgroundcontrol.qgroundcontrol NSAppSleepDisabled -bool YES");
 #endif
+#endif
 
-    // install the message handler
 #ifdef Q_OS_WIN
-    qInstallMessageHandler(msgHandler);
+    // Set our own OpenGL buglist
+    qputenv("QT_OPENGL_BUGLIST", ":/opengl/resources/opengl/buglist.json");
+
+    // Allow for command line override of renderer
+    for (int i = 0; i < argc; i++) {
+        const QString arg(argv[i]);
+        if (arg == QStringLiteral("-angle")) {
+            QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+            break;
+        } else if (arg == QStringLiteral("-swrast")) {
+            QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+            break;
+        }
+    }
 #endif
 
     // The following calls to qRegisterMetaType are done to silence debug output which warns
     // that we use these types in signals, and without calling qRegisterMetaType we can't queue
     // these signals. In general we don't queue these signals, but we do what the warning says
     // anyway to silence the debug output.
+#ifndef __ios__
     qRegisterMetaType<QSerialPort::SerialPortError>();
+#endif
+#ifdef QGC_ENABLE_BLUETOOTH
+    qRegisterMetaType<QBluetoothSocket::SocketError>();
+    qRegisterMetaType<QBluetoothServiceInfo>();
+#endif
     qRegisterMetaType<QAbstractSocket::SocketError>();
-    // We statically link to the google QtLocation plugin
+#ifndef __mobile__
+    qRegisterMetaType<QGCSerialPortInfo>();
+#endif
+
+    // We statically link our own QtLocation plugin
 
 #ifdef Q_OS_WIN
     // In Windows, the compiler doesn't see the use of the class created by Q_IMPORT_PLUGIN
@@ -118,15 +189,21 @@ int main(int argc, char *argv[])
     // We parse a small set of command line options here prior to QGCApplication in order to handle the ones
     // which need to be handled before a QApplication object is started.
 
+    bool stressUnitTests = false;       // Stress test unit tests
     bool quietWindowsAsserts = false;   // Don't let asserts pop dialog boxes
 
+    QString unitTestOptions;
     CmdLineOpt_t rgCmdLineOptions[] = {
-        { "--unittest",             &runUnitTests,          QString() },
-        { "--no-windows-assert-ui", &quietWindowsAsserts,   QString() },
+        { "--unittest",             &runUnitTests,          &unitTestOptions },
+        { "--unittest-stress",      &stressUnitTests,       &unitTestOptions },
+        { "--no-windows-assert-ui", &quietWindowsAsserts,   NULL },
         // Add additional command line option flags here
     };
 
     ParseCmdLineOptions(argc, argv, rgCmdLineOptions, sizeof(rgCmdLineOptions)/sizeof(rgCmdLineOptions[0]), false);
+    if (stressUnitTests) {
+        runUnitTests = true;
+    }
 
     if (quietWindowsAsserts) {
 #ifdef Q_OS_WIN
@@ -155,24 +232,30 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QList<QPair<QByteArray,QByteArray> > >();
 
     app->_initCommon();
+    //-- Initialize Cache System
+    getQGCMapEngine()->init();
 
-    int exitCode;
+    int exitCode = 0;
 
-#ifndef __android__
+#ifndef __mobile__
 #ifdef QT_DEBUG
     if (runUnitTests) {
-        if (!app->_initForUnitTests()) {
-            return -1;
-        }
+        for (int i=0; i < (stressUnitTests ? 20 : 1); i++) {
+            if (!app->_initForUnitTests()) {
+                return -1;
+            }
 
-        // Run the test
-        int failures = UnitTest::run(rgCmdLineOptions[0].optionArg);
-        if (failures == 0) {
-            qDebug() << "ALL TESTS PASSED";
-        } else {
-            qDebug() << failures << " TESTS FAILED!";
+            // Run the test
+            int failures = UnitTest::run(unitTestOptions);
+            if (failures == 0) {
+                qDebug() << "ALL TESTS PASSED";
+                exitCode = 0;
+            } else {
+                qDebug() << failures << " TESTS FAILED!";
+                exitCode = -failures;
+                break;
+            }
         }
-        exitCode = -failures;
     } else
 #endif
 #endif
@@ -184,6 +267,8 @@ int main(int argc, char *argv[])
     }
 
     delete app;
+    //-- Shutdown Cache System
+    destroyMapEngine();
 
     qDebug() << "After app delete";
 

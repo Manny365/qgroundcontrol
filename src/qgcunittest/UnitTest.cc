@@ -29,6 +29,8 @@
 #include "UnitTest.h"
 #include "QGCApplication.h"
 #include "MAVLinkProtocol.h"
+#include "MainWindow.h"
+#include "Vehicle.h"
 
 bool UnitTest::_messageBoxRespondedTo = false;
 bool UnitTest::_badResponseButton = false;
@@ -41,14 +43,18 @@ QStringList UnitTest::_fileDialogResponse;
 enum UnitTest::FileDialogType UnitTest::_fileDialogExpectedType = getOpenFileName;
 int UnitTest::_missedFileDialogCount = 0;
 
-UnitTest::UnitTest(void) :
-    _expectMissedFileDialog(false),
-    _expectMissedMessageBox(false),
-    _unitTestRun(false),
-    _initCalled(false),
-    _cleanupCalled(false)
-{
-    
+UnitTest::UnitTest(void)
+    : _linkManager(NULL)
+    , _mockLink(NULL)
+    , _mainWindow(NULL)
+    , _vehicle(NULL)
+    , _expectMissedFileDialog(false)
+    , _expectMissedMessageBox(false)
+    , _unitTestRun(false)
+    , _initCalled(false)
+    , _cleanupCalled(false)
+{    
+
 }
 
 UnitTest::~UnitTest()
@@ -101,6 +107,13 @@ int UnitTest::run(QString& singleTest)
 void UnitTest::init(void)
 {
     _initCalled = true;
+
+    if (!_linkManager) {
+        _linkManager = qgcApp()->toolbox()->linkManager();
+        connect(_linkManager, &LinkManager::linkDeleted, this, &UnitTest::_linkDeleted);
+    }
+
+    _linkManager->restart();
     
     _messageBoxRespondedTo = false;
     _missedMessageBoxCount = 0;
@@ -115,10 +128,6 @@ void UnitTest::init(void)
     _expectMissedFileDialog = false;
     _expectMissedMessageBox = false;
     
-    // Each test gets a clean global state
-    qgcApp()->_destroySingletons();
-    qgcApp()->_createSingletons();
-    
     MAVLinkProtocol::deleteTempLogFiles();
 }
 
@@ -127,6 +136,12 @@ void UnitTest::init(void)
 void UnitTest::cleanup(void)
 {
     _cleanupCalled = true;
+
+    _disconnectMockLink();
+    _closeMainWindow();
+
+    // We add a slight delay here to allow for deleteLater and Qml cleanup
+    QTest::qWait(200);
 
     // Keep in mind that any code below these QCOMPARE may be skipped if the compare fails
     if (_expectMissedMessageBox) {
@@ -137,8 +152,6 @@ void UnitTest::cleanup(void)
         QEXPECT_FAIL("", "Expecting failure due internal testing", Continue);
     }
     QCOMPARE(_missedFileDialogCount, 0);
-    
-    qgcApp()->_destroySingletons();
 }
 
 void UnitTest::setExpectedMessageBox(QMessageBox::StandardButton response)
@@ -354,4 +367,75 @@ QString UnitTest::_getSaveFileName(
     }
 
     return _fileDialogResponseSingle(getSaveFileName);
+}
+
+void UnitTest::_connectMockLink(MAV_AUTOPILOT autopilot)
+{
+    Q_ASSERT(!_mockLink);
+
+    switch (autopilot) {
+    case MAV_AUTOPILOT_PX4:
+        _mockLink = MockLink::startPX4MockLink(false);
+        break;
+    case MAV_AUTOPILOT_ARDUPILOTMEGA:
+        _mockLink = MockLink::startAPMArduCopterMockLink(false);
+        break;
+    case MAV_AUTOPILOT_GENERIC:
+        _mockLink = MockLink::startGenericMockLink(false);
+        break;
+    default:
+        qWarning() << "Type not supported";
+        break;
+    }
+
+    // Wait for the Vehicle to get created
+    QSignalSpy spyVehicle(qgcApp()->toolbox()->multiVehicleManager(), SIGNAL(parameterReadyVehicleAvailableChanged(bool)));
+    QCOMPARE(spyVehicle.wait(5000), true);
+    QVERIFY(qgcApp()->toolbox()->multiVehicleManager()->parameterReadyVehicleAvailable());
+    _vehicle = qgcApp()->toolbox()->multiVehicleManager()->activeVehicle();
+    QVERIFY(_vehicle);
+}
+
+void UnitTest::_disconnectMockLink(void)
+{
+    if (_mockLink) {
+        QSignalSpy  linkSpy(_linkManager, SIGNAL(linkDeleted(LinkInterface*)));
+
+        _linkManager->disconnectLink(_mockLink);
+
+        // Wait for link to go away
+        linkSpy.wait(1000);
+        QCOMPARE(linkSpy.count(), 1);
+
+        _vehicle = NULL;
+    }
+}
+
+void UnitTest::_linkDeleted(LinkInterface* link)
+{
+    if (link == _mockLink) {
+        _mockLink = NULL;
+    }
+}
+
+void UnitTest::_createMainWindow(void)
+{
+    _mainWindow = MainWindow::_create();
+    Q_CHECK_PTR(_mainWindow);
+}
+
+void UnitTest::_closeMainWindow(bool cancelExpected)
+{
+    if (_mainWindow) {
+        QSignalSpy  mainWindowSpy(_mainWindow, SIGNAL(mainWindowClosed()));
+
+        _mainWindow->close();
+
+        mainWindowSpy.wait(2000);
+        QCOMPARE(mainWindowSpy.count(), cancelExpected ? 0 : 1);
+
+        // This leaves enough time for any dangling Qml components to get cleaned up.
+        // This prevents qWarning from bad references in Qml
+        QTest::qWait(1000);
+    }
 }

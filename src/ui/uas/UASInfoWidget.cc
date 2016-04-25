@@ -30,26 +30,31 @@ This file is part of the PIXHAWK project
  */
 
 #include <QtGlobal>
-
-#include <float.h>
-#include <UASInfoWidget.h>
-#include <UASManager.h>
-#include <QGC.h>
 #include <QTimer>
 #include <QDir>
+#include <QDebug>
+
+#include <float.h>
 #include <cstdlib>
 #include <cmath>
 
-#include <QDebug>
+#include "UASInfoWidget.h"
+#include "MultiVehicleManager.h"
+#include "QGC.h"
+#include "UAS.h"
+#include "QGCApplication.h"
 
-UASInfoWidget::UASInfoWidget(QWidget *parent, QString name) : QWidget(parent)
+UASInfoWidget::UASInfoWidget(const QString& title, QAction* action, QWidget *parent, QString name)
+    : QGCDockWidget(title, action, parent)
+    , _activeUAS(NULL)
+    , _seqLossPercent(0)
+    , _seqLossTotal(0)
 {
     ui.setupUi(this);
     this->name = name;
-    activeUAS = NULL;
 
-    connect(UASManager::instance(), SIGNAL(activeUASSet(UASInterface*)), this, SLOT(setActiveUAS(UASInterface*)));
-    setActiveUAS(UASManager::instance()->getActiveUAS());
+    connect(qgcApp()->toolbox()->multiVehicleManager(), &MultiVehicleManager::activeVehicleChanged, this, &UASInfoWidget::_activeVehicleChanged);
+    _activeVehicleChanged(qgcApp()->toolbox()->multiVehicleManager()->activeVehicle());
 
     startTime = QGC::groundTimeMilliseconds();
 
@@ -67,10 +72,15 @@ UASInfoWidget::UASInfoWidget(QWidget *parent, QString name) : QWidget(parent)
     errors = QMap<QString, int>();
 
     updateTimer = new QTimer(this);
-    connect(updateTimer, SIGNAL(timeout()), this, SLOT(refresh()));
+    connect(updateTimer, &QTimer::timeout, this, &UASInfoWidget::refresh);
     updateTimer->start(updateInterval);
 
     this->setVisible(false);
+    
+    loadSettings();
+
+    connect(qgcApp()->toolbox()->mavlinkProtocol(), &MAVLinkProtocol::receiveLossPercentChanged, this, &UASInfoWidget::updateSeqLossPercent);
+    connect(qgcApp()->toolbox()->mavlinkProtocol(), &MAVLinkProtocol::receiveLossTotalChanged, this, &UASInfoWidget::updateSeqLossTotal);
 }
 
 UASInfoWidget::~UASInfoWidget()
@@ -94,23 +104,23 @@ void UASInfoWidget::hideEvent(QHideEvent* event)
     updateTimer->stop();
 }
 
-void UASInfoWidget::addUAS(UASInterface* uas)
+void UASInfoWidget::_activeVehicleChanged(Vehicle* vehicle)
 {
-    if (uas != NULL) {
-        connect(uas, SIGNAL(batteryChanged(UASInterface*, double, double, double, int)), this, SLOT(updateBattery(UASInterface*, double, double, double, int)));
-        connect(uas, SIGNAL(dropRateChanged(int,float)), this, SLOT(updateReceiveLoss(int,float)));
-        connect(uas, SIGNAL(loadChanged(UASInterface*, double)), this, SLOT(updateCPULoad(UASInterface*,double)));
-        connect(uas, SIGNAL(errCountChanged(int,QString,QString,int)), this, SLOT(updateErrorCount(int,QString,QString,int)));
-
-        // Set this UAS as active if it is the first one
-        if (activeUAS == 0) activeUAS = uas;
+    if (_activeUAS) {
+        disconnect(_activeUAS, &UASInterface::batteryChanged, this, &UASInfoWidget::updateBattery);
+        disconnect(_activeUAS, &UASInterface::dropRateChanged, this, &UASInfoWidget::updateReceiveLoss);
+        disconnect(static_cast<UAS*>(_activeUAS), &UAS::loadChanged, this, &UASInfoWidget::updateCPULoad);
+        disconnect(_activeUAS, &UASInterface::errCountChanged, this, &UASInfoWidget::updateErrorCount);
+        _activeUAS = NULL;
     }
-}
-
-void UASInfoWidget::setActiveUAS(UASInterface* uas)
-{
-    if (uas)
-        activeUAS = uas;
+    
+    if (vehicle) {
+        _activeUAS = vehicle->uas();
+        connect(_activeUAS, &UASInterface::batteryChanged, this, &UASInfoWidget::updateBattery);
+        connect(_activeUAS, &UASInterface::dropRateChanged, this, &UASInfoWidget::updateReceiveLoss);
+        connect(static_cast<UAS*>(_activeUAS), &UAS::loadChanged, this, &UASInfoWidget::updateCPULoad);
+        connect(_activeUAS, &UASInterface::errCountChanged, this, &UASInfoWidget::updateErrorCount);
+    }
 }
 
 void UASInfoWidget::updateBattery(UASInterface* uas, double voltage, double current, double percent, int seconds)
@@ -123,8 +133,8 @@ void UASInfoWidget::updateBattery(UASInterface* uas, double voltage, double curr
 
 void UASInfoWidget::updateErrorCount(int uasid, QString component, QString device, int count)
 {
-    //qDebug() << __FILE__ << __LINE__ << activeUAS->getUASID() << "=" << uasid;
-    if (activeUAS->getUASID() == uasid) {
+    //qDebug() << __FILE__ << __LINE__ << _activeUAS->getUASID() << "=" << uasid;
+    if (_activeUAS->getUASID() == uasid) {
         errors.remove(component + ":" + device);
         errors.insert(component + ":" + device, count);
     }
@@ -135,7 +145,7 @@ void UASInfoWidget::updateErrorCount(int uasid, QString component, QString devic
  */
 void UASInfoWidget::updateCPULoad(UASInterface* uas, double load)
 {
-    if (activeUAS == uas) {
+    if (_activeUAS == uas) {
         this->load = load;
     }
 }
@@ -144,6 +154,24 @@ void UASInfoWidget::updateReceiveLoss(int uasId, float receiveLoss)
 {
     Q_UNUSED(uasId);
     this->receiveLoss = this->receiveLoss * 0.8f + receiveLoss * 0.2f;
+}
+
+void UASInfoWidget::updateSeqLossPercent(int uasId, float seqLossPercent)
+{
+    if (_activeUAS && _activeUAS->getUASID() == uasId) {
+        _seqLossPercent = _seqLossPercent * 0.8f + seqLossPercent * 0.2f;
+    } else {
+        _seqLossPercent = 0;
+    }
+}
+
+void UASInfoWidget::updateSeqLossTotal(int uasId, int seqLossTotal)
+{
+    if (_activeUAS && _activeUAS->getUASID() == uasId) {
+        _seqLossTotal = seqLossTotal;
+    } else {
+        _seqLossTotal = 0;
+    }
 }
 
 /**
@@ -164,14 +192,14 @@ void UASInfoWidget::setVoltage(UASInterface* uas, double voltage)
 
 void UASInfoWidget::setChargeLevel(UASInterface* uas, double chargeLevel)
 {
-    if (activeUAS == uas) {
+    if (_activeUAS == uas) {
         this->chargeLevel = chargeLevel;
     }
 }
 
 void UASInfoWidget::setTimeRemaining(UASInterface* uas, double seconds)
 {
-    if (activeUAS == uas) {
+    if (_activeUAS == uas) {
         this->timeRemaining = seconds;
     }
 }
@@ -186,6 +214,11 @@ void UASInfoWidget::refresh()
 
     ui.receiveLossBar->setValue(qMax(0, qMin(static_cast<int>(receiveLoss), 100)));
     ui.receiveLossLabel->setText(QString::number(receiveLoss, 'f', 2));
+
+    ui.seqLossBar->setValue(qMax(0, qMin(static_cast<int>(_seqLossPercent), 100)));
+    ui.seqLossLabel->setText(QString::number(_seqLossPercent, 'f', 2));
+
+    ui.seqcntLossLabel->setText(QString::number(_seqLossTotal));
 
     ui.sendLossBar->setValue(sendLoss);
     ui.sendLossLabel->setText(QString::number(sendLoss, 'f', 2));

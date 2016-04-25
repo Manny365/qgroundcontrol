@@ -32,6 +32,9 @@
 
 #include "UASInterface.h"
 #include "FactPanelController.h"
+#include "QGCLoggingCategory.h"
+
+Q_DECLARE_LOGGING_CATEGORY(SensorsComponentControllerLog)
 
 /// Sensors Component MVC Controller for SensorsComponent.qml.
 class SensorsComponentController : public FactPanelController
@@ -78,8 +81,11 @@ public:
     Q_PROPERTY(bool orientationCalTailDownSideInProgress MEMBER _orientationCalTailDownSideInProgress NOTIFY orientationCalSidesInProgressChanged)
     
     Q_PROPERTY(bool orientationCalDownSideRotate MEMBER _orientationCalDownSideRotate NOTIFY orientationCalSidesRotateChanged)
+    Q_PROPERTY(bool orientationCalUpsideDownSideRotate MEMBER _orientationCalUpsideDownSideRotate NOTIFY orientationCalSidesRotateChanged)
     Q_PROPERTY(bool orientationCalLeftSideRotate MEMBER _orientationCalLeftSideRotate NOTIFY orientationCalSidesRotateChanged)
+    Q_PROPERTY(bool orientationCalRightSideRotate MEMBER _orientationCalRightSideRotate NOTIFY orientationCalSidesRotateChanged)
     Q_PROPERTY(bool orientationCalNoseDownSideRotate MEMBER _orientationCalNoseDownSideRotate NOTIFY orientationCalSidesRotateChanged)
+    Q_PROPERTY(bool orientationCalTailDownSideRotate MEMBER _orientationCalTailDownSideRotate NOTIFY orientationCalSidesRotateChanged)
     
     Q_PROPERTY(bool waitingForCancel MEMBER _waitingForCancel NOTIFY waitingForCancelChanged)
     
@@ -89,6 +95,7 @@ public:
     Q_INVOKABLE void calibrateLevel(void);
     Q_INVOKABLE void calibrateAirspeed(void);
     Q_INVOKABLE void cancelCalibration(void);
+    Q_INVOKABLE bool usingUDPLink(void);
     
     bool fixedWing(void);
     
@@ -112,6 +119,7 @@ private:
     void _appendStatusLog(const QString& text);
     void _refreshParams(void);
     void _hideAllCalAreas(void);
+    void _resetInternalState(void);
     
     enum StopCalibrationCode {
         StopCalibrationSuccess,
@@ -161,11 +169,16 @@ private:
     bool _orientationCalTailDownSideInProgress;
     
     bool _orientationCalDownSideRotate;
+    bool _orientationCalUpsideDownSideRotate;
     bool _orientationCalLeftSideRotate;
+    bool _orientationCalRightSideRotate;
     bool _orientationCalNoseDownSideRotate;
+    bool _orientationCalTailDownSideRotate;
     
     bool _unknownFirmwareVersion;
     bool _waitingForCancel;
+    
+    static const int _supportedFirmwareCalVersion = 2;
 };
 
 #endif

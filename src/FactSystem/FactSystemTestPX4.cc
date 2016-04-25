@@ -25,16 +25,7 @@
 ///     @author Don Gagne <don@thegagnes.com>
 
 #include "FactSystemTestPX4.h"
-#include "LinkManager.h"
-#include "MockLink.h"
-#include "AutoPilotPluginManager.h"
-#include "UASManager.h"
-#include "QGCApplication.h"
-#include "QGCQuickWidget.h"
-
-#include <QQuickItem>
-
-UT_REGISTER_TEST(FactSystemTestPX4)
+#include "QGCMAVLink.h"
 
 /// FactSystem Unit Test for PX4 autpilot
 FactSystemTestPX4::FactSystemTestPX4(void)

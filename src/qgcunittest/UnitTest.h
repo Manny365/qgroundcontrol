@@ -28,18 +28,24 @@
 
 #ifndef UNITTEST_H
 #define UNITTEST_H
-#ifndef __android__
+#ifndef __mobile__
 
 #include <QObject>
 #include <QtTest>
 #include <QMessageBox>
 #include <QFileDialog>
 
-#define UT_REGISTER_TEST(className) static UnitTestWrapper<className> t(#className);
+#include "QGCMAVLink.h"
+#include "LinkInterface.h"
+
+#define UT_REGISTER_TEST(className) static UnitTestWrapper<className> className(#className);
 
 class QGCMessageBox;
 class QGCFileDialog;
-class UnitTest;
+class LinkManager;
+class MockLink;
+class MainWindow;
+class Vehicle;
 
 class UnitTest : public QObject
 {
@@ -102,9 +108,22 @@ protected slots:
     virtual void cleanup(void);
     
 protected:
+    void _connectMockLink(MAV_AUTOPILOT autopilot = MAV_AUTOPILOT_PX4);
+    void _disconnectMockLink(void);
+    void _createMainWindow(void);
+    void _closeMainWindow(bool cancelExpected = false);
+
+    LinkManager*    _linkManager;
+    MockLink*       _mockLink;
+    MainWindow*     _mainWindow;
+    Vehicle*        _vehicle;
+
     bool _expectMissedFileDialog;   // true: expect a missed file dialog, used for internal testing
     bool _expectMissedMessageBox;   // true: expect a missed message box, used for internal testing
-    
+
+private slots:
+    void _linkDeleted(LinkInterface* link);
+
 private:
     // When the app is running in unit test mode the QGCMessageBox methods are re-routed here.
     

@@ -22,7 +22,7 @@
  ======================================================================*/
 
 /// @file
-///     @brief Dialog to configure RC to paramter mapping
+///     @brief Dialog to configure RC to parameter mapping
 ///     @author Thomas Gubler <thomasgubler@gmail.com>
 
 #ifndef QGCMAPRCTOPARAMDIALOG_H
@@ -33,35 +33,13 @@
 
 #include "UASInterface.h"
 #include "AutoPilotPlugin.h"
+#include "MultiVehicleManager.h"
 
 namespace Ui {
 class QGCMapRCToParamDialog;
 }
 
 
-class ParamLoader : public QObject
-{
-    Q_OBJECT
-
-public:
-    ParamLoader(QString paramName, UASInterface* uas, QObject* parent = NULL);
-
-public slots:
-    void load();
-
-signals:
-    void paramLoaded(bool success, float value, QString message = "");
-    void correctParameterChanged();
-    
-private slots:
-    void _parameterUpdated(QVariant value);
-
-private:
-    UASInterface*       _uas;
-    AutoPilotPlugin*    _autopilot;
-    QString             _paramName;
-    bool                _paramReceived;
-};
 
 class QGCMapRCToParamDialog : public QDialog
 {
@@ -69,26 +47,27 @@ class QGCMapRCToParamDialog : public QDialog
     QThread paramLoadThread;
 
 public:
-    explicit QGCMapRCToParamDialog(QString param_id,
-            UASInterface *mav, QWidget *parent = 0);
+    explicit QGCMapRCToParamDialog(QString param_id, UASInterface *mav, MultiVehicleManager* multiVehicleManager, QWidget *parent = 0);
     ~QGCMapRCToParamDialog();
 
 signals:
     void mapRCToParamDialogResult(QString param_id, float scale, float value0,
             quint8 param_rc_channel_index, float valueMin, float valueMax);
-    void refreshParam();
 
 public slots:
     void accept();
-    void paramLoaded(bool success, float value, QString message);
 
 protected:
     // void showEvent(QShowEvent * event );
     QString param_id;
     UASInterface *mav;
 
+private slots:
+    void _parameterUpdated(QVariant value);
+
 private:
-    Ui::QGCMapRCToParamDialog *ui;
+    MultiVehicleManager*        _multiVehicleManager;
+    Ui::QGCMapRCToParamDialog*  ui;
 };
 
 #endif // QGCMAPRCTOPARAMDIALOG_H

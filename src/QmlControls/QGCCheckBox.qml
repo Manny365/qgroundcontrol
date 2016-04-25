@@ -29,10 +29,8 @@ CheckBox {
                 id:             text
                 text:           control.text
                 antialiasing:   true
-                font.pointSize: ScreenTools.defaultFontPointSize
-
-                anchors.centerIn: parent
-
+                font.pixelSize: ScreenTools.defaultFontPixelSize
+                anchors.verticalCenter: parent.verticalCenter
                 color: control.__qgcPal.text
             }
         }

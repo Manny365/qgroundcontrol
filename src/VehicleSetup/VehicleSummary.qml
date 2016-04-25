@@ -21,113 +21,137 @@
 
  ======================================================================*/
 
-import QtQuick 2.2
-import QtQuick.Controls 1.2
-import QtQuick.Controls.Styles 1.2
+import QtQuick                  2.2
+import QtQuick.Controls         1.2
+import QtQuick.Controls.Styles  1.2
 
-import QGroundControl.FactSystem 1.0
-import QGroundControl.Palette 1.0
-import QGroundControl.Controls 1.0
-import QGroundControl.ScreenTools 1.0
+import QGroundControl                       1.0
+import QGroundControl.FactSystem            1.0
+import QGroundControl.Controls              1.0
+import QGroundControl.ScreenTools           1.0
+import QGroundControl.MultiVehicleManager   1.0
+import QGroundControl.Palette               1.0
 
 Rectangle {
-    width: 600
-    height: 400
+    id:             _summaryRoot
+    anchors.fill:   parent
+    color:          qgcPal.window
 
-    property var qgcPal: QGCPalette { id: palette; colorGroupEnabled: true }
+    property real _minSummaryW:     ScreenTools.defaultFontPixelWidth * 30
+    property real _summaryBoxWidth: _minSummaryW
+    property real _summaryBoxSpace: ScreenTools.defaultFontPixelWidth
 
-    id: topLevel
-    objectName: "topLevel"
-
-    color: qgcPal.window
-
-    Column {
-        anchors.fill: parent
-
-        QGCLabel {
-            text: "VEHICLE SUMMARY"
-            font.pointSize: ScreenTools.fontPointFactor * (20);
+    function computeSummaryBoxSize() {
+        var sw  = 0
+        var rw  = 0
+        var idx = Math.floor(_summaryRoot.width / (_minSummaryW + ScreenTools.defaultFontPixelWidth))
+        if(idx < 1) {
+            _summaryBoxWidth = _summaryRoot.width
+            _summaryBoxSpace = 0
+        } else {
+            _summaryBoxSpace = 0
+            if(idx > 1) {
+                _summaryBoxSpace = ScreenTools.defaultFontPixelWidth
+                sw = _summaryBoxSpace * (idx - 1)
+            }
+            rw = _summaryRoot.width - sw
+            _summaryBoxWidth = rw / idx
         }
+    }
 
-        Item {
-            // Just used as a spacer
-            height: 15
-            width: 10
-        }
+    function capitalizeWords(sentence) {
+        return sentence.replace(/(?:^|\s)\S/g, function(a) { return a.toUpperCase(); });
+    }
 
-        QGCLabel {
-            width:			parent.width
-			wrapMode:		Text.WordWrap
-			color:			autopilot.setupComplete ? qgcPal.text : "red"
-            font.pointSize: autopilot.setupComplete ? ScreenTools.defaultFontPointSize : ScreenTools.fontPointFactor * (20)
-			text: autopilot.setupComplete ?
-                        "Below you will find a summary of the settings for your vehicle. To the left are the setup menus for each component." :
-                        "WARNING: Your vehicle requires setup prior to flight. Please resolve the items marked in red using the menu on the left."
-        }
+    QGCPalette {
+        id:                 qgcPal
+        colorGroupEnabled:  enabled
+    }
 
-        Item {
-            // Just used as a spacer
-            height: 20
-            width: 10
-        }
+    Component.onCompleted: {
+        computeSummaryBoxSize()
+    }
 
-        Flow {
-            width: parent.width
-            spacing: 10
+    onWidthChanged: {
+        computeSummaryBoxSize()
+    }
 
-            Repeater {
-                model: autopilot.vehicleComponents
+    QGCFlickable {
+        clip:               true
+        anchors.fill:       parent
+        contentHeight:      summaryColumn.height
+        contentWidth:       _summaryRoot.width
+        flickableDirection: Flickable.VerticalFlick
 
-                // Outer summary item rectangle
-                Rectangle {
-                    readonly property real titleHeight: 30
+        Column {
+            id:             summaryColumn
+            width:          _summaryRoot.width
+            spacing:        ScreenTools.defaultFontPixelHeight
 
-                    width:  250
-                    height: 200
-                    color:  qgcPal.windowShade
+            QGCLabel {
+                width:			parent.width
+                wrapMode:		Text.WordWrap
+                color:			setupComplete ? qgcPal.text : qgcPal.warningText
+                font.weight:    Font.DemiBold
+                text:           setupComplete ?
+                    qsTr("Below you will find a summary of the settings for your vehicle. To the left are the setup menus for each component.") :
+                    qsTr("WARNING: Your vehicle requires setup prior to flight. Please resolve the items marked in red using the menu on the left.")
+                property bool setupComplete: QGroundControl.multiVehicleManager.activeVehicle ? QGroundControl.multiVehicleManager.activeVehicle.autopilot.setupComplete : false
+            }
 
-                    // Title bar
+            Flow {
+                id:         _flowCtl
+                width:      _summaryRoot.width
+                spacing:    _summaryBoxSpace
+
+                Repeater {
+                    model: QGroundControl.multiVehicleManager.activeVehicle ? QGroundControl.multiVehicleManager.activeVehicle.autopilot.vehicleComponents : undefined
+
+                    // Outer summary item rectangle
                     Rectangle {
+                        width:      _summaryBoxWidth
+                        height:     ScreenTools.defaultFontPixelHeight * 13
+                        color:      qgcPal.window
+                        visible:    modelData.summaryQmlSource.toString() != ""
 
-                        width: parent.width
-                        height: titleHeight
-                        color: qgcPal.windowShadeDark
+                        readonly property real titleHeight: ScreenTools.defaultFontPixelHeight * 2
 
-                        // Title text
-                        QGCLabel {
-                            anchors.fill:   parent
+                        // Title bar
+                        Rectangle {
+                            id:     titleBar
+                            width:  parent.width
+                            height: titleHeight
+                            color:  qgcPal.windowShade
 
-                            color:          qgcPal.buttonText
-                            text:           modelData.name.toUpperCase()
+                            // Title text
+                            QGCLabel {
+                                anchors.fill:           parent
+                                verticalAlignment:      TextEdit.AlignVCenter
+                                horizontalAlignment:    TextEdit.AlignHCenter
+                                text:                   capitalizeWords(modelData.name)
+                            }
 
-                            verticalAlignment:      TextEdit.AlignVCenter
-                            horizontalAlignment:    TextEdit.AlignHCenter
+                            // Setup indicator
+                            Rectangle {
+                                anchors.rightMargin:    ScreenTools.defaultFontPixelWidth / 3
+                                anchors.right:          parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                width:                  ScreenTools.defaultFontPixelWidth
+                                height:                 width
+                                radius:                 width / 2
+                                color:                  modelData.setupComplete ? "#00d932" : "red"
+                                visible:                modelData.requiresSetup
+                            }
                         }
-                    }
 
-                    // Setup indicator
-                    Rectangle {
-                        readonly property real indicatorRadius: 6
-                        readonly property real indicatorRightInset: 5
-
-                        x:      parent.width - (indicatorRadius * 2) - indicatorRightInset
-                        y:      (parent.titleHeight - (indicatorRadius * 2)) / 2
-                        width:  indicatorRadius * 2
-                        height: indicatorRadius * 2
-                        radius: indicatorRadius
-                        color:  modelData.setupComplete ? "#00d932" : "red"
-                    }
-
-                    // Summary Qml
-                    Rectangle {
-                        y:      parent.titleHeight
-                        width:  parent.width
-                        height: parent.height - parent.titleHeight
-                        color:  qgcPal.windowShade
-
-                        Loader {
-                            anchors.fill: parent
-                            source: modelData.summaryQmlSource
+                        // Summary Qml
+                        Rectangle {
+                            anchors.top:    titleBar.bottom
+                            width:          parent.width
+                            Loader {
+                                anchors.fill:   parent
+                                source:         modelData.summaryQmlSource
+                            }
                         }
                     }
                 }

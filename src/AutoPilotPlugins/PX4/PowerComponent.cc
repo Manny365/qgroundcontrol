@@ -25,12 +25,11 @@
 ///     @author Gus Grubba <mavlink@grubba.com>
 
 #include "PowerComponent.h"
-#include "PX4RCCalibration.h"
 #include "QGCQmlWidgetHolder.h"
 #include "PX4AutoPilotPlugin.h"
 
-PowerComponent::PowerComponent(UASInterface* uas, AutoPilotPlugin* autopilot, QObject* parent) :
-    PX4Component(uas, autopilot, parent),
+PowerComponent::PowerComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent) :
+    VehicleComponent(vehicle, autopilot, parent),
     _name(tr("Power"))
 {
 }
@@ -47,7 +46,7 @@ QString PowerComponent::description(void) const
 
 QString PowerComponent::iconResource(void) const
 {
-    return "PowerComponentIcon.png";
+    return "/qmlimages/PowerComponentIcon.png";
 }
 
 bool PowerComponent::requiresSetup(void) const
@@ -58,21 +57,9 @@ bool PowerComponent::requiresSetup(void) const
 bool PowerComponent::setupComplete(void) const
 {
     QVariant cvalue, evalue, nvalue;
-    return _autopilot->getParameterFact(FactSystem::defaultComponentId, "BAT_V_CHARGED")->value().toFloat() != 0.0f &&
-        _autopilot->getParameterFact(FactSystem::defaultComponentId, "BAT_V_EMPTY")->value().toFloat() != 0.0f &&
-        _autopilot->getParameterFact(FactSystem::defaultComponentId, "BAT_N_CELLS")->value().toInt() != 0;
-}
-
-QString PowerComponent::setupStateDescription(void) const
-{
-    const char* stateDescription;
-
-    if (requiresSetup()) {
-        stateDescription = "Requires setup";
-    } else {
-        stateDescription = "Setup complete";
-    }
-    return QString(stateDescription);
+    return _autopilot->getParameterFact(FactSystem::defaultComponentId, "BAT_V_CHARGED")->rawValue().toFloat() != 0.0f &&
+        _autopilot->getParameterFact(FactSystem::defaultComponentId, "BAT_V_EMPTY")->rawValue().toFloat() != 0.0f &&
+        _autopilot->getParameterFact(FactSystem::defaultComponentId, "BAT_N_CELLS")->rawValue().toInt() != 0;
 }
 
 QStringList PowerComponent::setupCompleteChangedTriggerList(void) const
@@ -80,20 +67,9 @@ QStringList PowerComponent::setupCompleteChangedTriggerList(void) const
     return QStringList();
 }
 
-QStringList PowerComponent::paramFilterList(void) const
+QUrl PowerComponent::setupSource(void) const
 {
-    QStringList list;
-
-    return list;
-}
-
-QWidget* PowerComponent::setupWidget(void) const
-{
-    QGCQmlWidgetHolder* holder = new QGCQmlWidgetHolder();
-    Q_CHECK_PTR(holder);
-    holder->setAutoPilot(_autopilot);
-    holder->setSource(QUrl::fromUserInput("qrc:/qml/PowerComponent.qml"));
-    return holder;
+    return QUrl::fromUserInput("qrc:/qml/PowerComponent.qml");
 }
 
 QUrl PowerComponent::summaryQmlSource(void) const

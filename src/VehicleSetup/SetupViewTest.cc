@@ -26,92 +26,40 @@
 
 #include "SetupViewTest.h"
 #include "MockLink.h"
-#include "QGCMessageBox.h"
-#include "SetupView.h"
-#include "UASManager.h"
-#include "AutoPilotPluginManager.h"
-
-UT_REGISTER_TEST(SetupViewTest)
-
-SetupViewTest::SetupViewTest(void) :
-    _mainWindow(NULL),
-    _mainToolBar(NULL)
-{
-    
-}
-
-void SetupViewTest::init(void)
-{
-    UnitTest::init();
-
-    _mainWindow = MainWindow::_create(NULL);
-    Q_CHECK_PTR(_mainWindow);
-    
-    _mainToolBar = _mainWindow->getMainToolBar();
-    Q_ASSERT(_mainToolBar);
-}
-
-void SetupViewTest::cleanup(void)
-{
-    _mainWindow->close();
-    delete _mainWindow;
-    
-    UnitTest::cleanup();
-}
+#include "MultiVehicleManager.h"
+#include "QGCApplication.h"
 
 void SetupViewTest::_clickThrough_test(void)
-{
-    LinkManager* linkMgr = LinkManager::instance();
-    Q_CHECK_PTR(linkMgr);
-    
-    MockLink* link = new MockLink();
-    Q_CHECK_PTR(link);
-    link->setAutopilotType(MAV_AUTOPILOT_PX4);
-    LinkManager::instance()->_addLink(link);
-    linkMgr->connectLink(link);
-    QTest::qWait(5000); // Give enough time for UI to settle and heartbeats to go through
+{    
+    _createMainWindow();
+    _connectMockLink();
 
-    AutoPilotPlugin* autopilot = AutoPilotPluginManager::instance()->getInstanceForAutoPilotPlugin(UASManager::instance()->getActiveUAS()).data();
+    AutoPilotPlugin* autopilot = qgcApp()->toolbox()->multiVehicleManager()->activeVehicle()->autopilotPlugin();
     Q_ASSERT(autopilot);
-    
-    QSignalSpy spyPlugin(autopilot, SIGNAL(pluginReadyChanged(bool)));
-    if (!autopilot->pluginReady()) {
-        QCOMPARE(spyPlugin.wait(60000), true);
-    }
-    Q_ASSERT(autopilot->pluginReady());
-    
-    // Switch to the Setup view
-    _mainToolBar->onSetupView();
-    QTest::qWait(1000);
-    
-    MainWindow* mainWindow = MainWindow::instance();
-    Q_ASSERT(mainWindow);
-    QWidget* setupViewWidget = mainWindow->getCurrentViewWidget();
-    Q_ASSERT(setupViewWidget);
-    SetupView* setupView = qobject_cast<SetupView*>(setupViewWidget);
-    Q_ASSERT(setupView);
 
+    // Switch to the Setup view
+    qgcApp()->showSetupView();
+    QTest::qWait(1000);
+    
     // Click through fixed buttons
-    setupView->firmwareButtonClicked();
+    qDebug() << "Showing firmware";
+    qgcApp()->_showSetupFirmware();
     QTest::qWait(1000);
-    setupView->parametersButtonClicked();
+    qDebug() << "Showing parameters";
+    qgcApp()->_showSetupParameters();
     QTest::qWait(1000);
-    setupView->summaryButtonClicked();
+    qDebug() << "Showing summary";
+    qgcApp()->_showSetupSummary();
     QTest::qWait(1000);
     
     const QVariantList& components = autopilot->vehicleComponents();
     foreach(QVariant varComponent, components) {
-        setupView->setupButtonClicked(varComponent);
+        VehicleComponent* component = qobject_cast<VehicleComponent*>(qvariant_cast<QObject *>(varComponent));
+        qDebug() << "Showing" << component->name();
+        qgcApp()->_showSetupVehicleComponent(component);
+        QTest::qWait(1000);
     }
 
-    // On MainWindow close we should get a message box telling the user to disconnect first. Disconnect will then pop
-    // the log file save dialog.
-    
-    setExpectedMessageBox(QGCMessageBox::Yes);
-    setExpectedFileDialog(getSaveFileName, QStringList());
-    
-    _mainWindow->close();
-    QTest::qWait(1000); // Need to allow signals to move between threads
-    checkExpectedMessageBox();
-    checkExpectedFileDialog();
+    _disconnectMockLink();
+    _closeMainWindow();
 }

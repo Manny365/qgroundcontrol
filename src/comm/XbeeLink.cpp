@@ -2,7 +2,6 @@
 #include <QThread>
 #include <QMutex>
 #include <MG.h>
-#include <configuration.h>
 #include<string>
 #include "XbeeLink.h"
 
@@ -159,7 +158,7 @@ bool XbeeLink::_connect(void)
     return true;
 }
 
-bool XbeeLink::_disconnect(void)
+void XbeeLink::_disconnect(void)
 {
 	if(this->isRunning()) this->terminate(); //stop running the thread, restart it upon connect
 
@@ -171,22 +170,13 @@ bool XbeeLink::_disconnect(void)
 	this->m_connected = false;
 
 	emit disconnected();
-	return true;
 }
 
-void XbeeLink::writeBytes(const char *bytes, qint64 length)  // TO DO: delete the data array
+void XbeeLink::_writeBytes(const QByteArray bytes)
 {
-	char *data;
-	data = new char[length];
-	for(long i=0;i<length;i++)
+	if(!xbee_nsenddata(this->m_xbeeCon,const_cast<char*>(bytes.data()),bytes.size())) // return value of 0 is successful written
 	{
-		data[i] = bytes[i];
-	}
-	if(!xbee_nsenddata(this->m_xbeeCon,data,length)) // return value of 0 is successful written
-	{
-        // Log the amount and time written out for future data rate calculations.
-        QMutexLocker dataRateLocker(&dataRateMutex);
-        logDataRateToBuffer(outDataWriteAmounts, outDataWriteTimes, &outDataIndex, length, QDateTime::currentMSecsSinceEpoch());
+		_logOutputDataRate(bytes.size(), QDateTime::currentMSecsSinceEpoch());
 	}
 	else
 	{
@@ -207,11 +197,8 @@ void XbeeLink::readBytes()
 			data.push_back(xbeePkt->data[i]);
         }
 
-        emit bytesReceived(this, data);
-
-        // Log the amount and time received for future data rate calculations.
-        QMutexLocker dataRateLocker(&dataRateMutex);
-        logDataRateToBuffer(inDataWriteAmounts, inDataWriteTimes, &inDataIndex, data.length(), QDateTime::currentMSecsSinceEpoch());
+		_logInputDataRate(data.length(), QDateTime::currentMSecsSinceEpoch());
+		emit bytesReceived(this, data);
 	}
 }
 

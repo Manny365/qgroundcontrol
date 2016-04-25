@@ -34,10 +34,13 @@ This file is part of the QGROUNDCONTROL project
 #include <QVector>
 #include <QMutex>
 
-#include "QGCSingleton.h"
+#include "Vehicle.h"
+#include "QGCToolbox.h"
 
+class Vehicle;
 class UASInterface;
 class UASMessageHandler;
+class QGCApplication;
 
 /*!
  * @class UASMessage
@@ -63,6 +66,11 @@ public:
      * @brief Get (html) formatted text (in the form: "[11:44:21.137 - COMP:50] Info: [pm] sending list")
      */
     QString getFormatedText()   { return _formatedText; }
+    /**
+     * @return true: This message is a of a severity which is considered an error
+     */
+    bool severityIsError();
+
 private:
     UASMessage(int componentid, int severity, QString text);
     void _setFormatedText(const QString formatedText) { _formatedText = formatedText; }
@@ -72,13 +80,14 @@ private:
     QString _formatedText;
 };
 
-class UASMessageHandler : public QGCSingleton
+class UASMessageHandler : public QGCTool
 {
     Q_OBJECT
-    DECLARE_QGC_SINGLETON(UASMessageHandler, UASMessageHandler)
+
 public:
-    explicit UASMessageHandler(QObject *parent = 0);
+    explicit UASMessageHandler(QGCApplication* app);
     ~UASMessageHandler();
+
     /**
      * @brief Locks access to the message list
      */
@@ -100,6 +109,10 @@ public:
      */
     int getErrorCount();
     /**
+     * @brief Get error message count (never reset)
+     */
+    int getErrorCountTotal();
+    /**
      * @brief Get warning message count (Resets count once read)
      */
     int getWarningCount();
@@ -107,12 +120,18 @@ public:
      * @brief Get normal message count (Resets count once read)
      */
     int getNormalCount();
-public slots:
     /**
-     * @brief Set currently active UAS
-     * @param uas The current active UAS
+     * @brief Get latest error message
      */
-    void setActiveUAS(UASInterface* uas);
+    QString getLatestError()   { return _latestError; }
+
+    /// Begin to show message which are errors in the toolbar
+    void showErrorsInToolbar(void) { _showErrorsInToolbar = true; }
+
+    // Override from QGCTool
+    virtual void setToolbox(QGCToolbox *toolbox);
+
+public slots:
     /**
      * @brief Handle text message from current active UAS
      * @param uasid UAS Id
@@ -121,6 +140,7 @@ public slots:
      * @param text Message Text
      */
     void handleTextMessage(int uasid, int componentid, int severity, QString text);
+
 signals:
     /**
      * @brief Sent out when new message arrives
@@ -132,14 +152,21 @@ signals:
      * @param count The new message count
      */
     void textMessageCountChanged(int count);
+
+private slots:
+    void _activeVehicleChanged(Vehicle* vehicle);
+
 private:
-    // Stores the UAS that we're currently receiving messages from.
-    UASInterface* _activeUAS;
-    QVector<UASMessage*> _messages;
-    QMutex _mutex;
-    int _errorCount;
-    int _warningCount;
-    int _normalCount;
+    UASInterface*           _activeUAS;
+    QVector<UASMessage*>    _messages;
+    QMutex                  _mutex;
+    int                     _errorCount;
+    int                     _errorCountTotal;
+    int                     _warningCount;
+    int                     _normalCount;
+    QString                 _latestError;
+    bool                    _showErrorsInToolbar;
+    MultiVehicleManager*    _multiVehicleManager;
 };
 
 #endif // QGCMESSAGEHANDLER_H

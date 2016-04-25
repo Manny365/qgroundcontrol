@@ -29,10 +29,6 @@
 ///
 ///     @author Don Gagne <don@thegagnes.com>
 
-// This unit test has gotten too flaky to run reliably under TeamCity. Removing for now till there is
-// time to debug.
-//UT_REGISTER_TEST(TCPLinkUnitTest)
-
 TCPLinkUnitTest::TCPLinkUnitTest(void)
     : _config(NULL)
     , _link(NULL)
@@ -158,7 +154,7 @@ void TCPLinkUnitTest::_connectSucceed_test(void)
     const char* bytesWrittenSignal = SIGNAL(bytesWritten(qint64));
     MultiSignalSpy bytesWrittenSpy;
     QCOMPARE(bytesWrittenSpy.init(_link->getSocket(), &bytesWrittenSignal, 1), true);
-    _link->writeBytes(bytesOut.data(), bytesOut.size());
+    _link->writeBytesSafe(bytesOut.data(), bytesOut.size());
     _multiSpy->clearAllSignals();
     
     // We emit this signal such that it will be queued and run on the TCPLink thread. This in turn

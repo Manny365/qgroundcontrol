@@ -24,14 +24,20 @@
 #ifndef QGCMESSAGEBOX_H
 #define QGCMESSAGEBOX_H
 
+#ifdef __mobile__
+#error Should not be included in mobile builds
+#endif
+
 #include <QMessageBox>
 
 #include "MainWindow.h"
 #include "QGCApplication.h"
+
 #ifdef QT_DEBUG
-#ifndef __android__
+#ifndef __mobile__
 #include "UnitTest.h"
 #endif
+
 #endif
 
 /// @file
@@ -57,7 +63,7 @@ public:
         { return _messageBox(QMessageBox::Warning, title, text, buttons, defaultButton, parent); }
 
 private slots:
-    /// @brief The exec slot is private becasue when only want QGCMessageBox users to use the static methods. Otherwise it will break
+    /// @brief The exec slot is private because when only want QGCMessageBox users to use the static methods. Otherwise it will break
     ///         unit testing.
     int exec(void) { return QMessageBox::exec(); }
 
@@ -99,22 +105,22 @@ private:
         parent = _validateParameters(buttons, &defaultButton, parent);
 
         if (MainWindow::instance()) {
-            MainWindow::instance()->hideSplashScreen();
             if (parent == NULL) {
                 parent = MainWindow::instance();
             }
         }
 
+        qDebug() << "QGCMessageBox (unit testing)" << title << text;
+
 #ifdef QT_DEBUG
-#ifndef __android__
+#ifndef __mobile__
         if (qgcApp()->runningUnitTests()) {
-            qDebug() << "QGCMessageBox (unit testing)" << title << text;
             return UnitTest::_messageBox(icon, title, text, buttons, defaultButton);
         } else
 #endif
 #endif
         {
-#ifdef Q_OS_MAC
+#ifdef __macos__
             QString emptyTitle;
             QMessageBox box(icon, emptyTitle, title, buttons, parent);
             box.setDefaultButton(defaultButton);

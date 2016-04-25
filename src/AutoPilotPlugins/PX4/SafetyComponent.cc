@@ -25,12 +25,10 @@
 ///     @author Don Gagne <don@thegagnes.com>
 
 #include "SafetyComponent.h"
-#include "PX4RCCalibration.h"
-#include "QGCQmlWidgetHolder.h"
 #include "PX4AutoPilotPlugin.h"
 
-SafetyComponent::SafetyComponent(UASInterface* uas, AutoPilotPlugin* autopilot, QObject* parent) :
-    PX4Component(uas, autopilot, parent),
+SafetyComponent::SafetyComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent) :
+    VehicleComponent(vehicle, autopilot, parent),
     _name(tr("Safety"))
 {
 }
@@ -47,7 +45,7 @@ QString SafetyComponent::description(void) const
 
 QString SafetyComponent::iconResource(void) const
 {
-    return "SafetyComponentIcon.png";
+    return "/qmlimages/SafetyComponentIcon.png";
 }
 
 bool SafetyComponent::requiresSetup(void) const
@@ -61,40 +59,14 @@ bool SafetyComponent::setupComplete(void) const
     return true;
 }
 
-QString SafetyComponent::setupStateDescription(void) const
-{
-    const char* stateDescription;
-
-    if (requiresSetup()) {
-        stateDescription = "Requires setup";
-    } else {
-        stateDescription = "Setup complete";
-    }
-    return QString(stateDescription);
-}
-
 QStringList SafetyComponent::setupCompleteChangedTriggerList(void) const
 {
     return QStringList();
 }
 
-QStringList SafetyComponent::paramFilterList(void) const
+QUrl SafetyComponent::setupSource(void) const
 {
-    QStringList list;
-
-    return list;
-}
-
-QWidget* SafetyComponent::setupWidget(void) const
-{
-    QGCQmlWidgetHolder* holder = new QGCQmlWidgetHolder();
-    Q_CHECK_PTR(holder);
-
-    holder->setAutoPilot(_autopilot);
-
-    holder->setSource(QUrl::fromUserInput("qrc:/qml/SafetyComponent.qml"));
-
-    return holder;
+    return QUrl::fromUserInput("qrc:/qml/SafetyComponent.qml");
 }
 
 QUrl SafetyComponent::summaryQmlSource(void) const

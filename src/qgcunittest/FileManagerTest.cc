@@ -25,15 +25,14 @@
 ///     @author Don Gagne <don@thegagnes.com>
 
 #include "FileManagerTest.h"
-#include "UASManager.h"
+#include "MultiVehicleManager.h"
+#include "UAS.h"
+#include "QGCApplication.h"
 
-//UT_REGISTER_TEST(FileManagerTest)
-
-FileManagerTest::FileManagerTest(void) :
-    _mockLink(NULL),
-    _fileServer(NULL),
-    _fileManager(NULL),
-    _multiSpy(NULL)
+FileManagerTest::FileManagerTest(void)
+    : _fileServer(NULL)
+    , _fileManager(NULL)
+    , _multiSpy(NULL)
 {
 
 }
@@ -43,24 +42,12 @@ void FileManagerTest::init(void)
 {
     UnitTest::init();
     
-    _mockLink = new MockLink();
-    Q_CHECK_PTR(_mockLink);
-    LinkManager::instance()->_addLink(_mockLink);
-    LinkManager::instance()->connectLink(_mockLink);
+    _connectMockLink();
 
     _fileServer = _mockLink->getFileServer();
     QVERIFY(_fileServer != NULL);
     
-    // Wait or the UAS to show up
-    UASManagerInterface* uasManager = UASManager::instance();
-    QSignalSpy spyUasCreate(uasManager, SIGNAL(UASCreated(UASInterface*)));
-    if (!uasManager->getActiveUAS()) {
-        QCOMPARE(spyUasCreate.wait(10000), true);
-    }
-    UASInterface* uas = uasManager->getActiveUAS();
-    QVERIFY(uas != NULL);
-    
-    _fileManager = uas->getFileManager();
+    _fileManager = qgcApp()->toolbox()->multiVehicleManager()->activeVehicle()->uas()->getFileManager();
     QVERIFY(_fileManager != NULL);
     
     Q_ASSERT(_multiSpy == NULL);
@@ -88,9 +75,9 @@ void FileManagerTest::cleanup(void)
     
     // Disconnecting the link will prompt for log file save
     setExpectedFileDialog(getSaveFileName, QStringList());
-    LinkManager::instance()->disconnectLink(_mockLink);
+    _disconnectMockLink();
+
     _fileServer = NULL;
-    _mockLink = NULL;
     _fileManager = NULL;
     
     delete _multiSpy;
@@ -207,7 +194,7 @@ void FileManagerTest::_listTest(void)
             // And then it should have errored out because the next list Request would have failed.
             QCOMPARE(_multiSpy->checkOnlySignalByMask(commandErrorSignalMask), true);
         } else {
-            // For the simulated errors which failed the intial response we should not have gotten any results back at all.
+            // For the simulated errors which failed the initial response we should not have gotten any results back at all.
             // Just an error.
             QCOMPARE(_multiSpy->checkOnlySignalByMask(commandErrorSignalMask), true);
         }

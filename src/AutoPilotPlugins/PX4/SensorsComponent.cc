@@ -31,8 +31,8 @@
 
 // These two list must be kept in sync
 
-SensorsComponent::SensorsComponent(UASInterface* uas, AutoPilotPlugin* autopilot, QObject* parent) :
-    PX4Component(uas, autopilot, parent),
+SensorsComponent::SensorsComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent) :
+    VehicleComponent(vehicle, autopilot, parent),
     _name(tr("Sensors"))
 {
 
@@ -51,7 +51,7 @@ QString SensorsComponent::description(void) const
 
 QString SensorsComponent::iconResource(void) const
 {
-    return "SensorsComponentIcon.png";
+    return "/qmlimages/SensorsComponentIcon.png";
 }
 
 bool SensorsComponent::requiresSetup(void) const
@@ -61,8 +61,8 @@ bool SensorsComponent::requiresSetup(void) const
 
 bool SensorsComponent::setupComplete(void) const
 {
-    foreach(QString triggerParam, setupCompleteChangedTriggerList()) {
-        if (_autopilot->getParameterFact(FactSystem::defaultComponentId, triggerParam)->value().toFloat() == 0.0f) {
+    foreach(const QString &triggerParam, setupCompleteChangedTriggerList()) {
+        if (_autopilot->getParameterFact(FactSystem::defaultComponentId, triggerParam)->rawValue().toFloat() == 0.0f) {
             return false;
         }
     }
@@ -70,63 +70,48 @@ bool SensorsComponent::setupComplete(void) const
     return true;
 }
 
-QString SensorsComponent::setupStateDescription(void) const
-{
-    const char* stateDescription;
-    
-    if (requiresSetup()) {
-        stateDescription = "Requires calibration";
-    } else {
-        stateDescription = "Calibrated";
-    }
-    return QString(stateDescription);
-}
-
 QStringList SensorsComponent::setupCompleteChangedTriggerList(void) const
 {
     QStringList triggers;
     
     triggers << "CAL_MAG0_ID" << "CAL_GYRO0_ID" << "CAL_ACC0_ID";
-    if (_uas->getSystemType() == MAV_TYPE_FIXED_WING ||
-        _uas->getSystemType() == MAV_TYPE_VTOL_DUOROTOR ||
-        _uas->getSystemType() == MAV_TYPE_VTOL_QUADROTOR) {
-        triggers << "SENS_DPRES_OFF";
+    switch (_vehicle->vehicleType()) {
+        case MAV_TYPE_FIXED_WING:
+        case MAV_TYPE_VTOL_DUOROTOR:
+        case MAV_TYPE_VTOL_QUADROTOR:
+        case MAV_TYPE_VTOL_TILTROTOR:
+        case MAV_TYPE_VTOL_RESERVED2:
+        case MAV_TYPE_VTOL_RESERVED3:
+        case MAV_TYPE_VTOL_RESERVED4:
+        case MAV_TYPE_VTOL_RESERVED5:
+            triggers << "SENS_DPRES_OFF";
+            break;
+        default:
+            break;
     }
     
     return triggers;
 }
 
-QStringList SensorsComponent::paramFilterList(void) const
+QUrl SensorsComponent::setupSource(void) const
 {
-    QStringList list;
-    
-    list << "SENS_*" << "CAL_*";
-    
-    return list;
-}
-
-QWidget* SensorsComponent::setupWidget(void) const
-{
-    QGCQmlWidgetHolder* holder = new QGCQmlWidgetHolder();
-    Q_CHECK_PTR(holder);
-    
-    holder->setAutoPilot(_autopilot);    
-    holder->setSource(QUrl::fromUserInput("qrc:/qml/SensorsComponent.qml"));
-    
-    return holder;
+    return QUrl::fromUserInput("qrc:/qml/SensorsComponent.qml");
 }
 
 QUrl SensorsComponent::summaryQmlSource(void) const
 {
     QString summaryQml;
     
-    qDebug() << _uas->getSystemType();
-    if (_uas->getSystemType() == MAV_TYPE_FIXED_WING ||
-        _uas->getSystemType() == MAV_TYPE_VTOL_DUOROTOR ||
-        _uas->getSystemType() == MAV_TYPE_VTOL_QUADROTOR) {
-        summaryQml = "qrc:/qml/SensorsComponentSummaryFixedWing.qml";
-    } else {
-        summaryQml = "qrc:/qml/SensorsComponentSummary.qml";
+    switch (_vehicle->vehicleType()) {
+        case MAV_TYPE_FIXED_WING:
+        case MAV_TYPE_VTOL_DUOROTOR:
+        case MAV_TYPE_VTOL_QUADROTOR:
+        case MAV_TYPE_VTOL_TILTROTOR:
+            summaryQml = "qrc:/qml/SensorsComponentSummaryFixedWing.qml";
+            break;
+        default:
+            summaryQml = "qrc:/qml/SensorsComponentSummary.qml";
+            break;
     }
     
     return QUrl::fromUserInput(summaryQml);

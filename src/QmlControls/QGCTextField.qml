@@ -6,12 +6,21 @@ import QGroundControl.Palette 1.0
 import QGroundControl.ScreenTools 1.0
 
 TextField {
+    id: root
+
     property bool showUnits: false
     property string unitsLabel: ""
+
+    Component.onCompleted: {
+        if (typeof qgcTextFieldforwardKeysTo !== 'undefined') {
+            root.Keys.forwardTo = [qgcTextFieldforwardKeysTo]
+        }
+    }
 
     property var __qgcPal: QGCPalette { colorGroupEnabled: enabled }
 
     textColor: __qgcPal.textFieldText
+    height: ScreenTools.isMobile ? ScreenTools.defaultFontPixelHeight * 3 * 0.75 : implicitHeight
 
     Label {
         id: unitsLabelWidthGenerator
@@ -22,6 +31,7 @@ TextField {
     }
 
     style: TextFieldStyle {
+        font.pixelSize: ScreenTools.defaultFontPixelSize
         background: Item {
             id: backgroundItem
 
@@ -50,7 +60,7 @@ TextField {
                 width: unitsLabelWidthGenerator.width
 
                 text: control.unitsLabel
-                font.pointSize: ScreenTools.defaultFontPointSize
+                font.pixelSize: ScreenTools.defaultFontPixelSize
                 antialiasing:   true
 
                 color: control.textColor
@@ -59,5 +69,11 @@ TextField {
         }
 
         padding.right: control.showUnits ? unitsLabelWidthGenerator.width : control.__contentHeight/3
+    }
+
+    onActiveFocusChanged: {
+        if (!ScreenTools.isMobile && activeFocus) {
+            selectAll()
+        }
     }
 }

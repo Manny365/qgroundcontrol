@@ -25,22 +25,24 @@
 ///     @author Don Gagne <don@thegagnes.com>
 
 #include "AutoPilotPlugin.h"
-#include "SetupView.h"
 #include "QGCApplication.h"
-#include "QGCMessageBox.h"
-#include "MainWindow.h"
 #include "ParameterLoader.h"
+#include "UAS.h"
+#include "FirmwarePlugin.h"
 
-AutoPilotPlugin::AutoPilotPlugin(UASInterface* uas, QObject* parent) :
-    QObject(parent),
-    _uas(uas),
-    _pluginReady(false),
-	_setupComplete(false)
+AutoPilotPlugin::AutoPilotPlugin(Vehicle* vehicle, QObject* parent)
+    : QObject(parent)
+    , _vehicle(vehicle)
+    , _firmwarePlugin(vehicle->firmwarePlugin())
+    , _parametersReady(false)
+    , _missingParameters(false)
+	, _setupComplete(false)
 {
-    Q_ASSERT(_uas);
+    Q_ASSERT(vehicle);
 	
-	connect(_uas, &UASInterface::disconnected, this, &AutoPilotPlugin::_uasDisconnected);
-	connect(this, &AutoPilotPlugin::pluginReadyChanged, this, &AutoPilotPlugin::_pluginReadyChanged);
+	connect(_vehicle->uas(), &UASInterface::disconnected, this, &AutoPilotPlugin::_uasDisconnected);
+
+	connect(this, &AutoPilotPlugin::parametersReadyChanged, this, &AutoPilotPlugin::_parametersReadyChanged);
 }
 
 AutoPilotPlugin::~AutoPilotPlugin()
@@ -50,27 +52,19 @@ AutoPilotPlugin::~AutoPilotPlugin()
 
 void AutoPilotPlugin::_uasDisconnected(void)
 {
-	_pluginReady = false;
-	emit pluginReadyChanged(_pluginReady);
+	_parametersReady = false;
+	emit parametersReadyChanged(_parametersReady);
 }
 
-void AutoPilotPlugin::_pluginReadyChanged(bool pluginReady)
+void AutoPilotPlugin::_parametersReadyChanged(bool parametersReady)
 {
-	if (pluginReady) {
+	if (parametersReady) {
 		_recalcSetupComplete();
 		if (!_setupComplete) {
-			QGCMessageBox::warning("Setup", "One or more vehicle components require setup prior to flight.");
+            qgcApp()->showMessage("One or more vehicle components require setup prior to flight.");
 			
 			// Take the user to Vehicle Summary
-			MainWindow* mainWindow = MainWindow::instance();
-			Q_ASSERT(mainWindow);
-			mainWindow->getMainToolBar()->onSetupView();
-			qgcApp()->processEvents(QEventLoop::ExcludeUserInputEvents);
-			QWidget* setupViewWidget = mainWindow->getCurrentViewWidget();
-			Q_ASSERT(setupViewWidget);
-			SetupView* setupView = qobject_cast<SetupView*>(setupViewWidget);
-			Q_ASSERT(setupView);
-			setupView->summaryButtonClicked();
+            qgcApp()->showSetupView();
 			qgcApp()->processEvents(QEventLoop::ExcludeUserInputEvents);
 		}
 	}
@@ -98,40 +92,49 @@ void AutoPilotPlugin::_recalcSetupComplete(void)
 
 bool AutoPilotPlugin::setupComplete(void)
 {
-	Q_ASSERT(_pluginReady);
+	Q_ASSERT(_parametersReady);
 	return _setupComplete;
 }
 
-void AutoPilotPlugin::refreshAllParameters(void)
+void AutoPilotPlugin::resetAllParametersToDefaults(void)
 {
-	_getParameterLoader()->refreshAllParameters();
+    mavlink_message_t msg;
+    MAVLinkProtocol* mavlink = qgcApp()->toolbox()->mavlinkProtocol();
+
+    mavlink_msg_command_long_pack(mavlink->getSystemId(), mavlink->getComponentId(), &msg, _vehicle->uas()->getUASID(), 0, MAV_CMD_PREFLIGHT_STORAGE, 0, 2, -1, 0, 0, 0, 0, 0);
+    _vehicle->sendMessage(msg);
+}
+
+void AutoPilotPlugin::refreshAllParameters(unsigned char componentID)
+{
+    _vehicle->getParameterLoader()->refreshAllParameters((uint8_t)componentID);
 }
 
 void AutoPilotPlugin::refreshParameter(int componentId, const QString& name)
 {
-	_getParameterLoader()->refreshParameter(componentId, name);
+    _vehicle->getParameterLoader()->refreshParameter(componentId, name);
 }
 
 void AutoPilotPlugin::refreshParametersPrefix(int componentId, const QString& namePrefix)
 {
-	_getParameterLoader()->refreshParametersPrefix(componentId, namePrefix);
+    _vehicle->getParameterLoader()->refreshParametersPrefix(componentId, namePrefix);
 }
 
 bool AutoPilotPlugin::parameterExists(int componentId, const QString& name)
 {
-    return _getParameterLoader()->parameterExists(componentId, name);
+    return _vehicle->getParameterLoader()->parameterExists(componentId, name);
 }
 
 Fact* AutoPilotPlugin::getParameterFact(int componentId, const QString& name)
 {
-    return _getParameterLoader()->getFact(componentId, name);
+    return _vehicle->getParameterLoader()->getFact(componentId, name);
 }
 
 bool AutoPilotPlugin::factExists(FactSystem::Provider_t provider, int componentId, const QString& name)
 {
     switch (provider) {
         case FactSystem::ParameterProvider:
-            return _getParameterLoader()->parameterExists(componentId, name);
+            return _vehicle->getParameterLoader()->parameterExists(componentId, name);
             
         // Other providers will go here once they come online
     }
@@ -144,7 +147,7 @@ Fact* AutoPilotPlugin::getFact(FactSystem::Provider_t provider, int componentId,
 {
     switch (provider) {
         case FactSystem::ParameterProvider:
-            return _getParameterLoader()->getFact(componentId, name);
+            return _vehicle->getParameterLoader()->getFact(componentId, name);
             
         // Other providers will go here once they come online
     }
@@ -153,22 +156,22 @@ Fact* AutoPilotPlugin::getFact(FactSystem::Provider_t provider, int componentId,
     return NULL;
 }
 
-QStringList AutoPilotPlugin::parameterNames(void)
+QStringList AutoPilotPlugin::parameterNames(int componentId)
 {
-	return _getParameterLoader()->parameterNames();
+    return _vehicle->getParameterLoader()->parameterNames(componentId);
 }
 
 const QMap<int, QMap<QString, QStringList> >& AutoPilotPlugin::getGroupMap(void)
 {
-    return _getParameterLoader()->getGroupMap();
+    return _vehicle->getParameterLoader()->getGroupMap();
 }
 
 void AutoPilotPlugin::writeParametersToStream(QTextStream &stream)
 {
-	_getParameterLoader()->writeParametersToStream(stream, _uas->getUASName());
+    _vehicle->getParameterLoader()->writeParametersToStream(stream);
 }
 
-void AutoPilotPlugin::readParametersFromStream(QTextStream &stream)
+QString AutoPilotPlugin::readParametersFromStream(QTextStream &stream)
 {
-	_getParameterLoader()->readParametersFromStream(stream);
+    return _vehicle->getParameterLoader()->readParametersFromStream(stream);
 }
